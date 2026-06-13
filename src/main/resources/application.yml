@@ -33,8 +33,11 @@ spring:
       connect-timeout: 2000   # ms — don't block startup too long
 
   # ── Kafka ──────────────────────────────────────────────────────────────────
+  # fail-fast=false lets the app start even when the broker is not yet reachable
   kafka:
     bootstrap-servers: localhost:9092
+    admin:
+      fail-fast: false
     # Producer defaults
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
