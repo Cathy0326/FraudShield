@@ -1,0 +1,55 @@
+# ── Server ──────────────────────────────────────────────────────────────────
+server:
+  port: 8080
+
+spring:
+  # ── H2 In-Memory Database ─────────────────────────────────────────────────
+  # Swap the url/driver/dialect lines for PostgreSQL when ready.
+  datasource:
+    url: jdbc:h2:mem:fraudshield;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  # H2 web console — useful during development (disable in prod)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update   # auto-creates tables from @Entity classes
+    show-sql: false       # flip to true for query logging
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  # Used for sliding-window counters and short-lived risk state.
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      # password: secret   # uncomment when AUTH is enabled
+      connect-timeout: 2000   # ms — don't block startup too long
+
+  # ── Kafka ──────────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: localhost:9092
+    # Producer defaults
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    # Consumer defaults
+    consumer:
+      group-id: fraudshield-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.fraudshield.*"
+
+# ── App-level custom properties ───────────────────────────────────────────────
+fraudshield:
+  kafka:
+    topic:
+      order-events: order-events   # topic name used by producers/consumers
