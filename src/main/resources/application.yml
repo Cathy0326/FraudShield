@@ -65,3 +65,17 @@ fraudshield:
   kafka:
     topic:
       order-events: order-events   # topic name used by producers/consumers
+
+# ── Azure OpenAI ──────────────────────────────────────────────────────────────
+# 凭证通过环境变量或.env文件注入（不提交到git）
+# Credentials are injected via env vars / .env file — never committed to VCS
+azure:
+  openai:
+    endpoint: ${AZURE_OPENAI_ENDPOINT:}
+    key: ${AZURE_OPENAI_KEY:}
+    deployment: ${AZURE_OPENAI_DEPLOYMENT:gpt-4o}
+
+# ai.enabled=false 时跳过所有LLM调用（本地开发无需配置密钥）
+# Set ai.enabled=false to skip all LLM calls (useful for local dev without credentials)
+ai:
+  enabled: true

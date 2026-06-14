@@ -49,4 +49,7 @@ export const getEventByOrderId = (orderId) =>
 export const triggerTestOrders = () =>
   api.get('/test/send-orders').then((r) => r.data);
 
+export const getAiAnalysis = (orderId) =>
+  api.get(`/api/risk-events/${orderId}/ai-analysis`).then((r) => r.data);
+
 export default api;

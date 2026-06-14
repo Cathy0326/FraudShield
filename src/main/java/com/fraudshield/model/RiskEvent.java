@@ -41,4 +41,16 @@ public class RiskEvent {
 
     @CreationTimestamp
     private LocalDateTime detectedAt;
+
+    // ── AI增强字段（仅MEDIUM风险订单填充）──────────────────────────────────────
+    // AI-enriched fields — populated only for MEDIUM-risk orders via Azure OpenAI
+
+    private String aiRiskLevel;       // LLM的风险等级判断 / LLM's risk verdict
+    private Double aiConfidence;      // 置信度 0.0–1.0 / LLM confidence
+    @Column(length = 2048)
+    private String aiReasoning;       // LLM推理说明 / free-text reasoning
+    private String aiRecommendation;  // 建议操作 / recommended action
+    @Column(length = 1024)
+    private String aiKeyFactors;      // 关键因子 CSV / key factors, comma-separated
+    private Boolean aiEnhanced;       // 是否完成AI分析 / true when AI call succeeded
 }

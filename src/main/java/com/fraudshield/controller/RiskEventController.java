@@ -2,6 +2,10 @@ package com.fraudshield.controller;
 
 import com.fraudshield.dto.DashboardStatsDTO;
 import com.fraudshield.dto.RiskEventDTO;
+import com.fraudshield.model.AiAnalysis;
+import com.fraudshield.model.Order;
+import com.fraudshield.model.RiskResult;
+import com.fraudshield.service.AzureOpenAIService;
 import com.fraudshield.service.RiskEventService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,9 +20,11 @@ import java.util.Map;
 public class RiskEventController {
 
     private final RiskEventService riskEventService;
+    private final AzureOpenAIService aiService;
 
-    public RiskEventController(RiskEventService riskEventService) {
+    public RiskEventController(RiskEventService riskEventService, AzureOpenAIService aiService) {
         this.riskEventService = riskEventService;
+        this.aiService        = aiService;
     }
 
     // GET /api/risk-events/recent?limit=10
@@ -48,6 +54,24 @@ public class RiskEventController {
     @GetMapping("/{orderId}")
     public ResponseEntity<RiskEventDTO> getByOrderId(@PathVariable String orderId) {
         return ResponseEntity.ok(riskEventService.getEventByOrderId(orderId));
+    }
+
+    // GET /api/risk-events/{orderId}/ai-analysis — on-demand AI analysis for any stored event
+    @GetMapping("/{orderId}/ai-analysis")
+    public ResponseEntity<AiAnalysis> getAiAnalysis(@PathVariable String orderId) {
+        RiskEventDTO event = riskEventService.getEventByOrderId(orderId);
+        // 重新构造最简Order和RiskResult传给AI服务
+        // Reconstruct minimal Order + RiskResult to pass into the AI service
+        Order order = new Order(event.getOrderId(), event.getUserId(), event.getAmount(),
+                event.getIpAddress(), "", null);
+        RiskResult riskResult = RiskResult.builder()
+                .orderId(event.getOrderId())
+                .riskLevel(com.fraudshield.model.RiskLevel.valueOf(event.getRiskLevel()))
+                .riskScore(event.getRiskScore())
+                .triggeredRules(event.getTriggeredRules())
+                .explanation(event.getExplanation())
+                .build();
+        return ResponseEntity.ok(aiService.analyze(order, riskResult));
     }
 
     // DELETE /api/risk-events/{id} — ROLE_ADMIN only

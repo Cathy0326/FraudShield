@@ -23,15 +23,26 @@ public class RiskEventDTO {
     private String explanation;
     private LocalDateTime detectedAt;
 
+    // AI增强字段 / AI-enriched fields (only present for MEDIUM-risk orders)
+    private String aiRiskLevel;
+    private Double aiConfidence;
+    private String aiReasoning;
+    private String aiRecommendation;
+    private List<String> aiKeyFactors;
+    private Boolean aiEnhanced;
+
     /**
      * Entity → DTO 转换工厂方法
-     * Factory: converts the comma-separated triggeredRules string back to a List.
-     * This is the DTO pattern in action — DB format ≠ API format.
+     * Factory: converts comma-separated CSV strings back to Lists.
      */
     public static RiskEventDTO fromEntity(RiskEvent e) {
         List<String> rules = (e.getTriggeredRules() == null || e.getTriggeredRules().isBlank())
                 ? List.of()
                 : Arrays.asList(e.getTriggeredRules().split(","));
+
+        List<String> keyFactors = (e.getAiKeyFactors() == null || e.getAiKeyFactors().isBlank())
+                ? List.of()
+                : Arrays.asList(e.getAiKeyFactors().split(","));
 
         return RiskEventDTO.builder()
                 .id(e.getId())
@@ -44,6 +55,12 @@ public class RiskEventDTO {
                 .triggeredRules(rules)
                 .explanation(e.getExplanation())
                 .detectedAt(e.getDetectedAt())
+                .aiRiskLevel(e.getAiRiskLevel())
+                .aiConfidence(e.getAiConfidence())
+                .aiReasoning(e.getAiReasoning())
+                .aiRecommendation(e.getAiRecommendation())
+                .aiKeyFactors(keyFactors)
+                .aiEnhanced(e.getAiEnhanced())
                 .build();
     }
 }

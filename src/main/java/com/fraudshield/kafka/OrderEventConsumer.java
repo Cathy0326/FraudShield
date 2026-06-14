@@ -1,18 +1,18 @@
 package com.fraudshield.kafka;
 
+import com.fraudshield.model.AiAnalysis;
 import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskEvent;
 import com.fraudshield.model.RiskLevel;
 import com.fraudshield.model.RiskResult;
 import com.fraudshield.repository.RiskEventRepository;
 import com.fraudshield.rule.RiskDetectionEngine;
+import com.fraudshield.service.AzureOpenAIService;
 import com.fraudshield.service.RiskEventService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-
-import java.util.stream.Collectors;
 
 @Component
 public class OrderEventConsumer {
@@ -22,13 +22,16 @@ public class OrderEventConsumer {
     private final RiskDetectionEngine engine;
     private final RiskEventRepository repository;
     private final RiskEventService riskEventService;
+    private final AzureOpenAIService aiService;
 
     public OrderEventConsumer(RiskDetectionEngine engine,
                               RiskEventRepository repository,
-                              RiskEventService riskEventService) {
+                              RiskEventService riskEventService,
+                              AzureOpenAIService aiService) {
         this.engine           = engine;
         this.repository       = repository;
         this.riskEventService = riskEventService;
+        this.aiService        = aiService;
     }
 
     /**
@@ -72,7 +75,7 @@ public class OrderEventConsumer {
             return;
         }
 
-        RiskEvent event = RiskEvent.builder()
+        RiskEvent.RiskEventBuilder builder = RiskEvent.builder()
                 .orderId(order.getOrderId())
                 .userId(order.getUserId())
                 .ipAddress(order.getIpAddress())
@@ -80,10 +83,24 @@ public class OrderEventConsumer {
                 .riskLevel(result.getRiskLevel().name())
                 .riskScore(result.getRiskScore())
                 .triggeredRules(String.join(",", result.getTriggeredRules()))
-                .explanation(result.getExplanation())
-                .build();
+                .explanation(result.getExplanation());
 
-        repository.save(event);
+        // 只对MEDIUM风险订单调用AI（HIGH已确定，无需额外分析；调用有成本）
+        // Only call AI for MEDIUM — HIGH is certain (cost saving), NORMAL/LOW never reach here
+        if (result.getRiskLevel() == RiskLevel.MEDIUM) {
+            AiAnalysis ai = aiService.analyze(order, result);
+            builder.aiRiskLevel(ai.getAiRiskLevel())
+                   .aiConfidence(ai.getConfidence())
+                   .aiReasoning(ai.getReasoning())
+                   .aiRecommendation(ai.getRecommendation())
+                   .aiKeyFactors(ai.getKeyFactors() == null ? null
+                           : String.join(",", ai.getKeyFactors()))
+                   .aiEnhanced(ai.isAiEnhanced());
+            log.info("AI analysis for orderId={}: level={}, confidence={}, enhanced={}",
+                    order.getOrderId(), ai.getAiRiskLevel(), ai.getConfidence(), ai.isAiEnhanced());
+        }
+
+        repository.save(builder.build());
         log.info("Saved RiskEvent for {}/score={} order: {}",
                 result.getRiskLevel(), result.getRiskScore(), order.getOrderId());
     }

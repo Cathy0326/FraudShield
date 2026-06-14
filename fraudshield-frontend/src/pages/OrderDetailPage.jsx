@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getEventByOrderId } from '../services/api';
+import { getEventByOrderId, getAiAnalysis } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -8,16 +8,40 @@ import LoadingSpinner from '../components/LoadingSpinner';
 export default function OrderDetailPage() {
   const { orderId } = useParams();
   const navigate    = useNavigate();
-  const [event,   setEvent]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+  const [event,     setEvent]     = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState('');
+  const [ai,        setAi]        = useState(null);   // AI analysis (loaded separately)
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     getEventByOrderId(orderId)
-      .then(setEvent)
+      .then(data => {
+        setEvent(data);
+        // 如果存储的事件已含AI分析结果，直接使用；否则展示"Run AI Analysis"按钮
+        // If the stored event already has AI enrichment, surface it inline
+        if (data.aiEnhanced) {
+          setAi({
+            aiRiskLevel:    data.aiRiskLevel,
+            confidence:     data.aiConfidence,
+            reasoning:      data.aiReasoning,
+            recommendation: data.aiRecommendation,
+            keyFactors:     data.aiKeyFactors ?? [],
+            aiEnhanced:     true,
+          });
+        }
+      })
       .catch(() => setError('Order not found or an error occurred.'))
       .finally(() => setLoading(false));
   }, [orderId]);
+
+  function runAiAnalysis() {
+    setAiLoading(true);
+    getAiAnalysis(orderId)
+      .then(setAi)
+      .catch(() => setAi({ reasoning: 'AI analysis failed. Check backend logs.', aiEnhanced: false }))
+      .finally(() => setAiLoading(false));
+  }
 
   return (
     <div className="min-h-screen bg-dark-bg">
@@ -100,6 +124,93 @@ export default function OrderDetailPage() {
                   <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Explanation</p>
                   <p className="text-sm text-slate-300">{event.explanation}</p>
                 </div>
+              )}
+            </div>
+
+            {/* AI Analysis Card */}
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">AI Analysis</h2>
+                {/* 按需触发AI分析（对MEDIUM订单在消费时已自动完成，此按钮用于手动触发其他订单）
+                    On-demand trigger — MEDIUM orders are auto-analyzed at ingest time */}
+                {!ai && (
+                  <button
+                    onClick={runAiAnalysis}
+                    disabled={aiLoading}
+                    className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                  >
+                    {aiLoading ? 'Analyzing…' : 'Run AI Analysis'}
+                  </button>
+                )}
+              </div>
+
+              {aiLoading && <LoadingSpinner />}
+
+              {ai && (
+                <div className="space-y-4">
+                  {/* AI risk level + confidence */}
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">AI Risk Level</p>
+                      <RiskBadge riskLevel={ai.aiRiskLevel} />
+                    </div>
+                    {ai.confidence != null && (
+                      <div>
+                        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Confidence</p>
+                        <p className="text-sm font-semibold text-slate-200">
+                          {(ai.confidence * 100).toFixed(0)}%
+                        </p>
+                      </div>
+                    )}
+                    {ai.recommendation && (
+                      <div>
+                        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Recommendation</p>
+                        <span className="text-xs bg-amber-900/40 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full">
+                          {ai.recommendation}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Reasoning */}
+                  {ai.reasoning && (
+                    <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
+                      <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Reasoning</p>
+                      <p className="text-sm text-slate-300">{ai.reasoning}</p>
+                    </div>
+                  )}
+
+                  {/* Key factors */}
+                  {ai.keyFactors?.length > 0 && (
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase tracking-wide mb-2">Key Factors</p>
+                      <div className="flex flex-wrap gap-2">
+                        {ai.keyFactors.map(f => (
+                          <span key={f} className="text-xs bg-purple-900/40 text-purple-300 border border-purple-500/30 px-3 py-1 rounded-full">
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI enhanced badge */}
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      ai.aiEnhanced
+                        ? 'bg-green-900/40 text-green-300 border border-green-500/30'
+                        : 'bg-slate-700/40 text-slate-400 border border-slate-600/30'
+                    }`}>
+                      {ai.aiEnhanced ? '✓ AI Enhanced' : '⚠ AI Unavailable'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {!ai && !aiLoading && (
+                <p className="text-sm text-slate-500">
+                  Click "Run AI Analysis" to get an LLM-powered second opinion on this order.
+                </p>
               )}
             </div>
           </>
