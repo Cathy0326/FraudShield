@@ -29,3 +29,6 @@ replay_pid*
 # Environment files — never commit real credentials
 .env
 *.env.local
+
+# Claude Code agent working directories
+.claude/
