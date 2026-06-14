@@ -13,6 +13,7 @@ RUN mvn dependency:go-offline -q
 
 # 再复制源码并打包（依赖缓存命中时只重新编译源码）
 # Copy source and package — dependency layer above stays cached
+COPY checkstyle.xml .
 COPY src ./src
 RUN mvn package -DskipTests -q
 
