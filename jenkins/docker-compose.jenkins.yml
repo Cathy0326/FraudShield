@@ -32,7 +32,10 @@ services:
       - jenkins-data:/var/jenkins_home
 
   jenkins:
-    image: jenkins/jenkins:lts-jdk21
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
+    image: fraudshield-jenkins:local
     container_name: fraudshield-jenkins
     networks: [jenkins-net]
     depends_on: [docker]

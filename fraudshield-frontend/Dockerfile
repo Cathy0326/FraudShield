@@ -5,7 +5,7 @@ WORKDIR /app
 
 # 先复制package文件并安装依赖（层缓存优化）
 # Copy package files first — npm ci layer is cached unless package-lock.json changes
-COPY package*.json .
+COPY package*.json ./
 RUN npm ci --silent
 
 # 复制源码并构建
