@@ -1,0 +1,50 @@
+# Jenkins CI server — run with:
+#   docker compose -f jenkins/docker-compose.jenkins.yml up -d
+#
+# 首次启动后：
+# 1. 访问 http://localhost:8090
+# 2. 获取初始密码：docker exec fraudshield-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+# 3. 安装推荐插件
+# 4. 管理Jenkins → 工具配置 → 设置 JDK-21 和 Maven-3.9
+
+networks:
+  jenkins-net:
+    driver: bridge
+
+volumes:
+  jenkins-data:
+  jenkins-docker-certs:
+
+services:
+  # Docker-in-Docker — allows Jenkins to build Docker images
+  # Jenkins构建Docker镜像需要访问Docker守护进程
+  docker:
+    image: docker:dind
+    container_name: jenkins-dind
+    privileged: true
+    networks:
+      jenkins-net:
+        aliases: [docker]
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - jenkins-docker-certs:/certs/client
+      - jenkins-data:/var/jenkins_home
+
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    container_name: fraudshield-jenkins
+    networks: [jenkins-net]
+    depends_on: [docker]
+    ports:
+      - "8090:8080"    # Jenkins web UI
+      - "50000:50000"  # Agent JNLP port
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_CERT_PATH: /certs/client
+      DOCKER_TLS_VERIFY: "1"
+      # 跳过初始设置向导（可选，方便自动化）
+      # Uncomment to skip setup wizard: JAVA_OPTS: -Djenkins.install.runSetupWizard=false
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - jenkins-docker-certs:/certs/client:ro

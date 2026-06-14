@@ -1,12 +1,14 @@
-# Overrides applied when @ActiveProfiles("test") is set.
-# Keeps tests hermetic — no live Kafka or Redis required.
+# Integration test profile — disables Kafka/Redis so *IT.java tests use H2 only
 spring:
   kafka:
-    bootstrap-servers: localhost:9092   # points nowhere; Kafka beans still initialize lazily
+    bootstrap-servers: localhost:9092
+    admin:
+      fail-fast: false
   data:
     redis:
       host: localhost
       port: 6379
+      connect-timeout: 500
 
-# Tell KafkaAdmin not to fail fast when the broker is unreachable during tests
-spring.kafka.admin.fail-fast: false
+ai:
+  enabled: false

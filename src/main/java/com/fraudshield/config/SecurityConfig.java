@@ -1,5 +1,4 @@
 package com.fraudshield.config;
-
 import com.fraudshield.security.JwtAuthenticationFilter;
 import com.fraudshield.security.JwtTokenProvider;
 import jakarta.servlet.http.HttpServletResponse;

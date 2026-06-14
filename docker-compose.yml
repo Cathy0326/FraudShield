@@ -1,64 +1,116 @@
-version: "3.9"
+# FraudShield — full stack docker-compose
+# Startup order: zookeeper → kafka → redis → backend → frontend
 
-# ── Networks ────────────────────────────────────────────────────────────────
 networks:
   fraudshield-net:
     driver: bridge
 
+volumes:
+  redis-data:
+
 services:
 
-  # ── Zookeeper ────────────────────────────────────────────────────────────
+  # ── Zookeeper ──────────────────────────────────────────────────────────────
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
-    container_name: zookeeper
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: fraudshield-zookeeper
     networks: [fraudshield-net]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     healthcheck:
-      # zookeeper-shell is bundled in the Confluent image; 'ls /' succeeds when ZK is ready
-      test: ["CMD", "bash", "-c", "zookeeper-shell.sh localhost:2181 ls / 2>&1 | grep -q '\\['"]
+      # cub (Confluent Utility Belt) is bundled in all cp-* images — most reliable check
+      test: ["CMD", "cub", "zk-ready", "localhost:2181", "30"]
       interval: 10s
-      timeout: 10s
+      timeout: 35s
       retries: 10
       start_period: 20s
 
-  # ── Kafka ─────────────────────────────────────────────────────────────────
+  # ── Kafka ──────────────────────────────────────────────────────────────────
   kafka:
-    image: confluentinc/cp-kafka:7.6.1
-    container_name: kafka
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: fraudshield-kafka
     networks: [fraudshield-net]
     depends_on:
       zookeeper:
         condition: service_healthy
     ports:
-      - "9092:9092"   # host-accessible; app connects via localhost:9092
+      - "9092:9092"   # external (host → Kafka)
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      # PLAINTEXT_HOST listener is exposed to the Docker host (your app)
-      # PLAINTEXT listener is internal container-to-container traffic
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      # 29092: internal container-to-container traffic
+      # 9092:  external host access (your app / IntelliJ)
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
-      # Use the internal PLAINTEXT listener (29092) — 9092 is only for Docker-host access
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:29092"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 15s
       timeout: 10s
-      retries: 15
+      retries: 10
       start_period: 30s
 
-  # ── Redis 7 ───────────────────────────────────────────────────────────────
+  # ── Redis 7 ────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: redis
+    container_name: fraudshield-redis
     networks: [fraudshield-net]
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes   # persist data across restarts
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Spring Boot Backend ────────────────────────────────────────────────────
+  # Backend lives in the project root (no fraudshield-backend subdirectory)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fraudshield-backend
+    networks: [fraudshield-net]
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 容器间通信用服务名而不是localhost
+      # Container networking: use service name, not localhost
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JWT_SECRET: ZnJhdWRzaGllbGQtc2VjcmV0LWtleS0yMDI2LWhhY2thdGhvbg==
+      # Azure OpenAI credentials — sourced from .env file (never commit .env)
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-4o}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 60s
+
+  # ── React Frontend (nginx) ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./fraudshield-frontend
+      dockerfile: Dockerfile
+    container_name: fraudshield-frontend
+    networks: [fraudshield-net]
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy

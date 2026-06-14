@@ -32,3 +32,10 @@ fraudshield-frontend/dist/
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Environment files — never commit real credentials
+.env
+*.env.local
+
+# Claude Code agent working directories
+.claude/
