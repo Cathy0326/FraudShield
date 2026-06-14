@@ -13,6 +13,7 @@ RUN mvn dependency:go-offline -q
 
 # 再复制源码并打包（依赖缓存命中时只重新编译源码）
 # Copy source and package — dependency layer above stays cached
+COPY checkstyle.xml .
 COPY src ./src
 RUN mvn package -DskipTests -q
 
@@ -20,6 +21,8 @@ RUN mvn package -DskipTests -q
 # 只包含JRE运行环境，最终镜像约200MB
 # Only JRE in final image (~200MB vs ~600MB with full JDK + Maven)
 FROM eclipse-temurin:21-jre-alpine
+
+RUN apk add --no-cache curl
 
 WORKDIR /app
 

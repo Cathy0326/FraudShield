@@ -1,7 +1,7 @@
 package com.fraudshield.config;
-
 import com.fraudshield.security.JwtAuthenticationFilter;
 import com.fraudshield.security.JwtTokenProvider;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -35,6 +35,9 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())                    // REST API — no CSRF needed
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(e -> e.authenticationEntryPoint(
+                (req, res, ex) -> res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized")
+            ))
             .authorizeHttpRequests(auth -> auth
                 // 公开端点，无需Token (Public — no token required)
                 .requestMatchers(
