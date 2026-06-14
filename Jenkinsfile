@@ -112,12 +112,20 @@ pipeline {
         stage('Integration Tests') {
             steps {
                 echo 'Running integration tests (Failsafe — *IT.java)...'
-                sh 'mvn failsafe:integration-test failsafe:verify -q'
+                sh 'mvn failsafe:integration-test failsafe:verify jacoco:merge-results jacoco:report-merged -q'
             }
             post {
                 always {
                     junit allowEmptyResults: true,
                           testResults: '**/target/failsafe-reports/*.xml'
+                    // Merged unit + IT coverage report
+                    jacoco(
+                        execPattern:    '**/target/jacoco-merged.exec',
+                        classPattern:   '**/target/classes',
+                        sourcePattern:  '**/src/main/java',
+                        minimumLineCoverage:   '70',
+                        minimumBranchCoverage: '60'
+                    )
                 }
             }
         }
