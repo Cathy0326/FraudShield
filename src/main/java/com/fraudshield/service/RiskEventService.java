@@ -144,7 +144,13 @@ public class RiskEventService {
 
     private long parseRedisLong(String key) {
         String val = redisTemplate.opsForValue().get(key);
-        if (val == null) return 0L;
-        try { return Long.parseLong(val); } catch (NumberFormatException e) { return 0L; }
+        if (val == null) {
+            return 0L;
+        }
+        try {
+            return Long.parseLong(val);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 }
