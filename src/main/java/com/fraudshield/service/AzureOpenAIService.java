@@ -84,7 +84,7 @@ public class AzureOpenAIService {
         }
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────────
+    // ── Private helpers ──────────────────────────────
 
     private String buildPrompt(Order order, RiskResult riskResult) {
         return String.format("""

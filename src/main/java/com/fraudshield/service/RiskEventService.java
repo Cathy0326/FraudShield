@@ -102,7 +102,7 @@ public class RiskEventService {
         repository.deleteById(id);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // ── Private helpers ──────────────────────────────
 
     private Map<String, Long> buildRuleHitCounts() {
         // 从所有已存储事件中解析CSV规则字段
