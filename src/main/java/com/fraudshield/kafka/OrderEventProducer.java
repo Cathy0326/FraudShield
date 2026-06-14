@@ -52,7 +52,11 @@ public class OrderEventProducer {
 
         for (Order order : testOrders) {
             sendOrder(order);
-            try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
