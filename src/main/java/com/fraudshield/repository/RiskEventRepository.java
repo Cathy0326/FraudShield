@@ -17,7 +17,8 @@ public interface RiskEventRepository extends JpaRepository<RiskEvent, Long> {
 
     List<RiskEvent> findByDetectedAtBetween(LocalDateTime start, LocalDateTime end);
 
-    // 幂等性检查：根据orderId查找已存在的风险记录
-    // Idempotency check: find an existing record for this orderId
     Optional<RiskEvent> findByOrderId(String orderId);
+
+    List<RiskEvent> findByRiskLevelAndDetectedAtBetween(
+            String riskLevel, LocalDateTime start, LocalDateTime end);
 }

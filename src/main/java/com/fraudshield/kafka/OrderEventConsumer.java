@@ -6,6 +6,7 @@ import com.fraudshield.model.RiskLevel;
 import com.fraudshield.model.RiskResult;
 import com.fraudshield.repository.RiskEventRepository;
 import com.fraudshield.rule.RiskDetectionEngine;
+import com.fraudshield.service.RiskEventService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -20,10 +21,14 @@ public class OrderEventConsumer {
 
     private final RiskDetectionEngine engine;
     private final RiskEventRepository repository;
+    private final RiskEventService riskEventService;
 
-    public OrderEventConsumer(RiskDetectionEngine engine, RiskEventRepository repository) {
-        this.engine = engine;
-        this.repository = repository;
+    public OrderEventConsumer(RiskDetectionEngine engine,
+                              RiskEventRepository repository,
+                              RiskEventService riskEventService) {
+        this.engine           = engine;
+        this.repository       = repository;
+        this.riskEventService = riskEventService;
     }
 
     /**
@@ -33,8 +38,6 @@ public class OrderEventConsumer {
      * 幂等性保证 (Idempotency):
      *   Kafka的"at-least-once"语义下，同一消息可能被投递多次（网络重试、rebalance）。
      *   在保存前先检查orderId是否已存在，避免重复写入。
-     *   Kafka at-least-once = same message can arrive more than once.
-     *   We check for an existing orderId before saving to stay idempotent.
      */
     @KafkaListener(topics = "order-events", groupId = "fraudshield-group",
                    containerFactory = "kafkaListenerContainerFactory")
@@ -46,8 +49,6 @@ public class OrderEventConsumer {
         try {
             result = engine.evaluate(order);
         } catch (Exception e) {
-            // 消费者绝不能因业务异常崩溃 — 记录后继续消费下一条
-            // Consumer must never crash on a business error — log and move on
             log.error("Risk engine failed for orderId={}: {}", order.getOrderId(), e.getMessage(), e);
             return;
         }
@@ -56,16 +57,16 @@ public class OrderEventConsumer {
                 result.getOrderId(), result.getRiskLevel(),
                 result.getRiskScore(), result.getTriggeredRules());
 
-        // 只持久化HIGH和MEDIUM风险，NORMAL和LOW只记日志节省存储
-        // Persist only HIGH/MEDIUM; NORMAL/LOW are log-only to save storage
         if (result.getRiskLevel() == RiskLevel.HIGH || result.getRiskLevel() == RiskLevel.MEDIUM) {
             saveIfAbsent(order, result);
+        } else {
+            // NORMAL/LOW → 只记日志，但增加Redis普通订单计数器
+            // NORMAL/LOW → log only, but track in Redis so dashboard can show total volume
+            riskEventService.incrementNormalCounter();
         }
     }
 
     private void saveIfAbsent(Order order, RiskResult result) {
-        // 幂等性检查：已存在则跳过，避免重复写入
-        // Idempotency check: skip if this orderId was already persisted
         if (repository.findByOrderId(order.getOrderId()).isPresent()) {
             log.warn("Duplicate message detected for orderId={}, skipping save", order.getOrderId());
             return;
@@ -83,6 +84,7 @@ public class OrderEventConsumer {
                 .build();
 
         repository.save(event);
-        log.info("Saved RiskEvent for {}/score={} order: {}", result.getRiskLevel(), result.getRiskScore(), order.getOrderId());
+        log.info("Saved RiskEvent for {}/score={} order: {}",
+                result.getRiskLevel(), result.getRiskScore(), order.getOrderId());
     }
 }

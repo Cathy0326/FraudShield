@@ -19,18 +19,20 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import com.fraudshield.model.RiskEvent;
+import com.fraudshield.service.RiskEventService;
 
 @ExtendWith(MockitoExtension.class)
 class OrderEventConsumerTest {
 
     @Mock RiskDetectionEngine engine;
     @Mock RiskEventRepository repository;
+    @Mock RiskEventService riskEventService;
 
     private OrderEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new OrderEventConsumer(engine, repository);
+        consumer = new OrderEventConsumer(engine, repository, riskEventService);
     }
 
     private Order order(String orderId) {
