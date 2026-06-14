@@ -13,7 +13,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-
+import org.springframework.data.redis.core.ValueOperations;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -35,6 +39,11 @@ class RiskEventControllerIT {
 
     @BeforeEach
     void setUp() throws Exception {
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> mockOps = mock(ValueOperations.class);
+        when(stringRedisTemplate.opsForValue()).thenReturn(mockOps);
+        when(mockOps.get(anyString())).thenReturn("0");
+
         adminToken    = obtainToken("itadmin_" + TS, "It@123456", "ROLE_ADMIN");
         operatorToken = obtainToken("itop_" + TS,    "It@123456", "ROLE_OPERATOR");
     }

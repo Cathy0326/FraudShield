@@ -1,6 +1,13 @@
 # Maven build output
 target/
 
+# Frontend
+fraudshield-frontend/node_modules/
+fraudshield-frontend/dist/
+
+# Claude Code internal files
+.claude/worktrees/
+
 # Compiled class file
 *.class
 
