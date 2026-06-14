@@ -21,6 +21,8 @@ RUN mvn package -DskipTests -q
 # Only JRE in final image (~200MB vs ~600MB with full JDK + Maven)
 FROM eclipse-temurin:21-jre-alpine
 
+RUN apk add --no-cache curl
+
 WORKDIR /app
 
 # 从构建阶段复制打包好的jar
