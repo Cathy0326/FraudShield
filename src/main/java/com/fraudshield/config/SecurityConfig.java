@@ -1,31 +1,83 @@
 package com.fraudshield.config;
 
+import com.fraudshield.security.JwtAuthenticationFilter;
+import com.fraudshield.security.JwtTokenProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private final JwtTokenProvider tokenProvider;
+
+    public SecurityConfig(JwtTokenProvider tokenProvider) {
+        this.tokenProvider = tokenProvider;
+    }
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // Disable CSRF — stateless JWT API doesn't need it
-            .csrf(csrf -> csrf.disable())
+            .csrf(csrf -> csrf.disable())                    // REST API — no CSRF needed
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Public endpoints
-                .requestMatchers("/health", "/h2-console/**").permitAll()
-                // Everything else requires authentication (JWT coming later)
+                // 公开端点，无需Token (Public — no token required)
+                .requestMatchers(
+                    "/health",
+                    "/h2-console/**",
+                    "/auth/login",
+                    "/auth/register",
+                    "/test/**"           // test endpoints remain public for dev convenience
+                ).permitAll()
                 .anyRequest().authenticated()
             )
-            // Allow H2 console to render in an iframe
-            .headers(h -> h.frameOptions(fo -> fo.sameOrigin()));
+            // H2 console renders in an iframe — allow same-origin frames
+            .headers(h -> h.frameOptions(fo -> fo.sameOrigin()))
+            // JWT过滤器在Spring的用户名密码过滤器之前执行
+            // JWT filter runs before the default username/password filter
+            .addFilterBefore(
+                new JwtAuthenticationFilter(tokenProvider),
+                UsernamePasswordAuthenticationFilter.class
+            );
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:3000"));   // React dev server
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    @Bean
+    public BCryptPasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
+            throws Exception {
+        return config.getAuthenticationManager();
     }
 }

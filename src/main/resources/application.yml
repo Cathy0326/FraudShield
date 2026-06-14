@@ -16,6 +16,8 @@ spring:
     console:
       enabled: true
       path: /h2-console
+      settings:
+        web-allow-others: true   # allow access from non-localhost (Docker/remote)
 
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
@@ -50,6 +52,13 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "com.fraudshield.*"
+
+# ── JWT ──────────────────────────────────────────────────────────────────────
+# secret必须保密；这里是base64编码的字符串，对应 "fraudshield-secret-key-2026-hackathon"
+# Keep the secret out of VCS in production — use env var or vault instead
+jwt:
+  secret: "ZnJhdWRzaGllbGQtc2VjcmV0LWtleS0yMDI2LWhhY2thdGhvbg=="
+  expiration-ms: 86400000   # 24 hours in milliseconds
 
 # ── App-level custom properties ───────────────────────────────────────────────
 fraudshield:
