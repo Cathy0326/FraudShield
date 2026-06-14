@@ -43,7 +43,11 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Building branch: ${env.BRANCH_NAME ?: 'unknown'}, build #${BUILD_NUMBER}"
-                checkout scm
+                checkout([$class: 'GitSCM',
+                    branches: scm.branches,
+                    extensions: [[$class: 'CloneOption', timeout: 30]],
+                    userRemoteConfigs: scm.userRemoteConfigs
+                ])
             }
         }
 
