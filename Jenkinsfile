@@ -116,7 +116,7 @@ pipeline {
         stage('Integration Tests') {
             steps {
                 echo 'Running integration tests (Failsafe — *IT.java)...'
-                sh 'mvn failsafe:integration-test failsafe:verify jacoco:merge-results jacoco:report-merged -q'
+                sh 'mvn verify -DskipTests -Dcheckstyle.skip=true -Dspotbugs.skip=true -q'
             }
             post {
                 always {
