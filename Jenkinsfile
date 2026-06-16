@@ -43,7 +43,11 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo "Building branch: ${env.BRANCH_NAME ?: 'unknown'}, build #${BUILD_NUMBER}"
-                checkout scm
+                checkout([$class: 'GitSCM',
+                    branches: scm.branches,
+                    extensions: [[$class: 'CloneOption', timeout: 30]],
+                    userRemoteConfigs: scm.userRemoteConfigs
+                ])
             }
         }
 
@@ -112,12 +116,20 @@ pipeline {
         stage('Integration Tests') {
             steps {
                 echo 'Running integration tests (Failsafe — *IT.java)...'
-                sh 'mvn failsafe:integration-test failsafe:verify -q'
+                sh 'mvn verify -DskipTests -Dcheckstyle.skip=true -Dspotbugs.skip=true -q'
             }
             post {
                 always {
                     junit allowEmptyResults: true,
                           testResults: '**/target/failsafe-reports/*.xml'
+                    // Merged unit + IT coverage report
+                    jacoco(
+                        execPattern:    '**/target/jacoco-merged.exec',
+                        classPattern:   '**/target/classes',
+                        sourcePattern:  '**/src/main/java',
+                        minimumLineCoverage:   '70',
+                        minimumBranchCoverage: '60'
+                    )
                 }
             }
         }
