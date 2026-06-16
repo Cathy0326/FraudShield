@@ -211,15 +211,20 @@ pipeline {
             }
             steps {
                 echo 'Deploying...'
-                script {
-                    if (env.DEPLOY_TARGET == 'azure') {
-                        // Azure Container Apps 部署
-                        sh './deploy/deploy-azure.sh ${IMAGE_TAG}'
-                    } else if (env.DEPLOY_TARGET == 'aws') {
-                        sh './deploy/deploy-aws.sh ${IMAGE_TAG}'
-                    } else {
-                        // 默认：本地Docker Compose部署
-                        sh './deploy/deploy-local.sh ${IMAGE_TAG}'
+                withCredentials([
+                    string(credentialsId: 'azure-openai-endpoint', variable: 'AZURE_OPENAI_ENDPOINT'),
+                    string(credentialsId: 'azure-openai-key',      variable: 'AZURE_OPENAI_KEY')
+                ]) {
+                    script {
+                        if (env.DEPLOY_TARGET == 'azure') {
+                            // Azure Container Apps 部署
+                            sh './deploy/deploy-azure.sh ${IMAGE_TAG}'
+                        } else if (env.DEPLOY_TARGET == 'aws') {
+                            sh './deploy/deploy-aws.sh ${IMAGE_TAG}'
+                        } else {
+                            // 默认：本地Docker Compose部署
+                            sh './deploy/deploy-local.sh ${IMAGE_TAG}'
+                        }
                     }
                 }
             }
