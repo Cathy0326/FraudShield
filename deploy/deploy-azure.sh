@@ -84,7 +84,7 @@ az containerapp create \
     --env-vars \
         "AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}" \
         "AZURE_OPENAI_KEY=secretref:openai-key" \
-        "AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-gpt-4o}" \
+        "AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-gpt-4.1-mini}" \
         "JWT_SECRET=secretref:jwt-secret" \
         "AI_ENABLED=true" \
     --output none 2>/dev/null || \
