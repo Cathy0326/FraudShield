@@ -120,13 +120,13 @@ public class AzureOpenAIService {
     }
 
     private String callAzureOpenAI(String prompt) throws Exception {
-        // Azure OpenAI chat completions endpoint pattern:
-        // {endpoint}/openai/deployments/{deployment}/chat/completions?api-version=2024-02-01
-        String url = endpoint.replaceAll("/$", "")
-                + "/openai/deployments/" + deployment
-                + "/chat/completions?api-version=2024-02-01";
+        // Unified Azure OpenAI v1 inference API — OpenAI-compatible chat completions.
+        // endpoint must already include the /openai/v1 path segment, e.g.
+        // https://<resource>.services.ai.azure.com/openai/v1
+        String url = endpoint.replaceAll("/$", "") + "/chat/completions";
 
         String requestBody = objectMapper.writeValueAsString(java.util.Map.of(
+                "model", deployment,
                 "messages", List.of(
                         java.util.Map.of("role", "user", "content", prompt)
                 ),
