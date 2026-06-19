@@ -38,10 +38,17 @@ spring:
 
   # ── Kafka ──────────────────────────────────────────────────────────────────
   # fail-fast=false lets the app start even when the broker is not yet reachable
+  # Local dev / docker-compose: plaintext localhost:9092 (defaults below).
+  # Production: point at an Azure Event Hubs Kafka-compatible endpoint via env vars —
+  # see KAFKA_* below. Event Hubs requires SASL_SSL with the connection string as password.
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     admin:
       fail-fast: false
+    properties:
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
+      sasl.mechanism: ${KAFKA_SASL_MECHANISM:PLAIN}
+      sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
     # Producer defaults
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
