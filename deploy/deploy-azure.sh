@@ -87,6 +87,10 @@ az containerapp create \
         "AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-gpt-4.1-mini}" \
         "JWT_SECRET=secretref:jwt-secret" \
         "AI_ENABLED=true" \
+        "SPRING_DATA_REDIS_HOST=${REDIS_HOST:-localhost}" \
+        "SPRING_DATA_REDIS_PORT=${REDIS_PORT:-6380}" \
+        "SPRING_DATA_REDIS_PASSWORD=secretref:redis-key" \
+        "SPRING_DATA_REDIS_SSL_ENABLED=${REDIS_SSL_ENABLED:-true}" \
     --output none 2>/dev/null || \
 az containerapp update \
     --name fraudshield-backend \
@@ -141,4 +145,4 @@ echo ""
 echo "Next: add secrets via 'az containerapp secret set'"
 echo "  az containerapp secret set --name fraudshield-backend \\"
 echo "    --resource-group ${RESOURCE_GROUP} \\"
-echo "    --secrets openai-key=\${AZURE_OPENAI_KEY} jwt-secret=\${JWT_SECRET}"
+echo "    --secrets openai-key=\${AZURE_OPENAI_KEY} jwt-secret=\${JWT_SECRET} redis-key=\${REDIS_KEY}"

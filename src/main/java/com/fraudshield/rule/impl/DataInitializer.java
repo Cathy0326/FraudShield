@@ -39,23 +39,30 @@ public class DataInitializer implements CommandLineRunner {
         seedUsers();
     }
 
+    // Redis is unavailable in some environments (e.g. a fresh Container Apps deploy
+    // before Azure Cache for Redis is wired up); seeding is dev convenience only,
+    // so a connection failure here must not take down the whole app context.
     private void seedRedis() {
-        long now = System.currentTimeMillis();
+        try {
+            long now = System.currentTimeMillis();
 
-        // 新用户测试数据：2小时前创建的账号 (in the 24h new-user window)
-        redisTemplate.opsForValue().set(
-                "user:created:USER-TEST-001",
-                String.valueOf(now - 2 * 60 * 60 * 1000L)
-        );
+            // 新用户测试数据：2小时前创建的账号 (in the 24h new-user window)
+            redisTemplate.opsForValue().set(
+                    "user:created:USER-TEST-001",
+                    String.valueOf(now - 2 * 60 * 60 * 1000L)
+            );
 
-        // 历史均值测试数据 / Historical EMA for AbnormalAmountRule
-        redisTemplate.opsForValue().set("user:avg_amount:USER-TEST-002", "50.0");
+            // 历史均值测试数据 / Historical EMA for AbnormalAmountRule
+            redisTemplate.opsForValue().set("user:avg_amount:USER-TEST-002", "50.0");
 
-        // 黑名单测试数据 / Blacklist seeds
-        redisTemplate.opsForSet().add("blacklist:ips",   "10.0.0.1");
-        redisTemplate.opsForSet().add("blacklist:users", "USER-BAD-001");
+            // 黑名单测试数据 / Blacklist seeds
+            redisTemplate.opsForSet().add("blacklist:ips",   "10.0.0.1");
+            redisTemplate.opsForSet().add("blacklist:users", "USER-BAD-001");
 
-        log.info("DataInitializer: seeded Redis test data");
+            log.info("DataInitializer: seeded Redis test data");
+        } catch (Exception e) {
+            log.warn("DataInitializer: Redis unavailable, skipping test data seed: {}", e.getMessage());
+        }
     }
 
     private void seedUsers() {

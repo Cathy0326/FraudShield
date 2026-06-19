@@ -31,7 +31,9 @@ spring:
     redis:
       host: localhost
       port: 6379
-      # password: secret   # uncomment when AUTH is enabled
+      password: ""   # override via SPRING_DATA_REDIS_PASSWORD env var
+      ssl:
+        enabled: false   # Azure Cache for Redis requires SSL — override via SPRING_DATA_REDIS_SSL_ENABLED
       connect-timeout: 2000   # ms — don't block startup too long
 
   # ── Kafka ──────────────────────────────────────────────────────────────────
