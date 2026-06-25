@@ -45,8 +45,13 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     admin:
       fail-fast: false
+    # security.protocol has a dedicated KafkaProperties field — bind it there directly.
+    # Putting it under the generic `properties:` map (like sasl.mechanism/sasl.jaas.config
+    # below) doesn't reliably pick up env var overrides, because Map<String,String> relaxed
+    # binding doesn't match dotted keys like "security.protocol" the way dedicated fields do.
+    security:
+      protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
     properties:
-      security.protocol: ${KAFKA_SECURITY_PROTOCOL:PLAINTEXT}
       sasl.mechanism: ${KAFKA_SASL_MECHANISM:PLAIN}
       sasl.jaas.config: ${KAFKA_SASL_JAAS_CONFIG:}
     # Producer defaults
