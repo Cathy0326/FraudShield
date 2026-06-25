@@ -15,4 +15,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
  && rm -rf /var/lib/apt/lists/*
 
+# Install Azure CLI so Jenkins can az login / az acr login / az containerapp update
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+
 USER jenkins

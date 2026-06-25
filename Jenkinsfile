@@ -12,11 +12,17 @@ pipeline {
     agent any
 
     environment {
-        // Docker镜像名称 — 覆盖时传入 DOCKER_REGISTRY env var
-        // Override DOCKER_REGISTRY with your ACR/ECR URI for cloud deployments
-        DOCKER_REGISTRY  = "${env.DOCKER_REGISTRY ?: ''}"
-        BACKEND_IMAGE    = "${env.DOCKER_REGISTRY ? env.DOCKER_REGISTRY + '/' : ''}fraudshield-backend"
-        FRONTEND_IMAGE   = "${env.DOCKER_REGISTRY ? env.DOCKER_REGISTRY + '/' : ''}fraudshield-frontend"
+        // Azure target — override any of these as Jenkins job/global env vars if they change
+        ACR_NAME           = "${env.ACR_NAME ?: 'fraudshield5393acr'}"
+        RESOURCE_GROUP     = "${env.RESOURCE_GROUP ?: 'fraudshield-rg'}"
+        CONTAINER_APP_ENV  = "${env.CONTAINER_APP_ENV ?: 'fraudshield-env'}"
+        DEPLOY_TARGET      = "${env.DEPLOY_TARGET ?: 'azure'}"
+        // Docker镜像名称 — defaults to the ACR login server above; override DOCKER_REGISTRY to point elsewhere
+        DOCKER_REGISTRY  = "${env.DOCKER_REGISTRY ?: ACR_NAME + '.azurecr.io'}"
+        BACKEND_IMAGE    = "${DOCKER_REGISTRY}/fraudshield-backend"
+        FRONTEND_IMAGE   = "${DOCKER_REGISTRY}/fraudshield-frontend"
+        // BUILD_NUMBER is unique per run, so each deploy gets a genuinely new image tag —
+        // Azure Container Apps then auto-creates a new revision, no manual --revision-suffix needed
         IMAGE_TAG        = "${env.BUILD_NUMBER}"
         MAVEN_OPTS       = "-Xmx512m -XX:+TieredCompilation"
     }
@@ -179,18 +185,21 @@ pipeline {
                 echo 'Pushing images to registry...'
                 script {
                     if (env.DOCKER_REGISTRY) {
-                        // Azure Container Registry 登录
-                        // For ACR: az acr login --name <registry-name>
-                        // For AWS ECR: aws ecr get-login-password | docker login ...
-                        withCredentials([string(credentialsId: 'docker-registry-password',
-                                                variable: 'REGISTRY_PASS')]) {
+                        // Azure CLI service principal login, then az acr login (token-based,
+                        // no separate registry password needed since ACR is in our own subscription)
+                        withCredentials([
+                            string(credentialsId: 'azure-sp-client-id',     variable: 'AZURE_CLIENT_ID'),
+                            string(credentialsId: 'azure-sp-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                            string(credentialsId: 'azure-sp-tenant-id',     variable: 'AZURE_TENANT_ID')
+                        ]) {
                             sh """
-                                echo "${REGISTRY_PASS}" | \
-                                docker login ${DOCKER_REGISTRY} -u \$REGISTRY_USER --password-stdin
+                                az login --service-principal -u "\$AZURE_CLIENT_ID" -p "\$AZURE_CLIENT_SECRET" --tenant "\$AZURE_TENANT_ID" --output none
+                                az acr login --name ${ACR_NAME}
                                 docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
                                 docker push ${BACKEND_IMAGE}:latest
                                 docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
                                 docker push ${FRONTEND_IMAGE}:latest
+                                az logout
                             """
                         }
                     } else {
@@ -213,12 +222,20 @@ pipeline {
                 echo 'Deploying...'
                 withCredentials([
                     string(credentialsId: 'azure-openai-endpoint', variable: 'AZURE_OPENAI_ENDPOINT'),
-                    string(credentialsId: 'azure-openai-key',      variable: 'AZURE_OPENAI_KEY')
+                    string(credentialsId: 'azure-openai-key',      variable: 'AZURE_OPENAI_KEY'),
+                    string(credentialsId: 'azure-sp-client-id',     variable: 'AZURE_CLIENT_ID'),
+                    string(credentialsId: 'azure-sp-client-secret', variable: 'AZURE_CLIENT_SECRET'),
+                    string(credentialsId: 'azure-sp-tenant-id',     variable: 'AZURE_TENANT_ID')
                 ]) {
                     script {
                         if (env.DEPLOY_TARGET == 'azure') {
-                            // Azure Container Apps 部署
-                            sh './deploy/deploy-azure.sh ${IMAGE_TAG}'
+                            // Azure Container Apps 部署 — az login first so deploy-azure.sh's
+                            // az containerapp/acr commands are authenticated
+                            sh '''
+                                az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" --output none
+                                ./deploy/deploy-azure.sh "${IMAGE_TAG}"
+                                az logout
+                            '''
                         } else if (env.DEPLOY_TARGET == 'aws') {
                             sh './deploy/deploy-aws.sh ${IMAGE_TAG}'
                         } else {
