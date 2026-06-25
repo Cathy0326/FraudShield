@@ -12,11 +12,17 @@ pipeline {
     agent any
 
     environment {
-        // Docker镜像名称 — 覆盖时传入 DOCKER_REGISTRY env var
-        // Override DOCKER_REGISTRY with your ACR/ECR URI for cloud deployments
-        DOCKER_REGISTRY  = "${env.DOCKER_REGISTRY ?: ''}"
-        BACKEND_IMAGE    = "${env.DOCKER_REGISTRY ? env.DOCKER_REGISTRY + '/' : ''}fraudshield-backend"
-        FRONTEND_IMAGE   = "${env.DOCKER_REGISTRY ? env.DOCKER_REGISTRY + '/' : ''}fraudshield-frontend"
+        // Azure target — override any of these as Jenkins job/global env vars if they change
+        ACR_NAME           = "${env.ACR_NAME ?: 'fraudshield5393acr'}"
+        RESOURCE_GROUP     = "${env.RESOURCE_GROUP ?: 'fraudshield-rg'}"
+        CONTAINER_APP_ENV  = "${env.CONTAINER_APP_ENV ?: 'fraudshield-env'}"
+        DEPLOY_TARGET      = "${env.DEPLOY_TARGET ?: 'azure'}"
+        // Docker镜像名称 — defaults to the ACR login server above; override DOCKER_REGISTRY to point elsewhere
+        DOCKER_REGISTRY  = "${env.DOCKER_REGISTRY ?: ACR_NAME + '.azurecr.io'}"
+        BACKEND_IMAGE    = "${DOCKER_REGISTRY}/fraudshield-backend"
+        FRONTEND_IMAGE   = "${DOCKER_REGISTRY}/fraudshield-frontend"
+        // BUILD_NUMBER is unique per run, so each deploy gets a genuinely new image tag —
+        // Azure Container Apps then auto-creates a new revision, no manual --revision-suffix needed
         IMAGE_TAG        = "${env.BUILD_NUMBER}"
         MAVEN_OPTS       = "-Xmx512m -XX:+TieredCompilation"
     }
@@ -179,14 +185,13 @@ pipeline {
                 echo 'Pushing images to registry...'
                 script {
                     if (env.DOCKER_REGISTRY) {
-                        // Azure Container Registry 登录
-                        // For ACR: az acr login --name <registry-name>
-                        // For AWS ECR: aws ecr get-login-password | docker login ...
-                        withCredentials([string(credentialsId: 'docker-registry-password',
-                                                variable: 'REGISTRY_PASS')]) {
+                        // ACR admin credentials (resource-level RBAC) — not an Azure AD service
+                        // principal, so this works even in tenants that block self-service app
+                        // registration (e.g. university/student tenants). Fetch once with:
+                        //   az acr credential show --name <ACR_NAME> --query "passwords[0].value" -o tsv
+                        withCredentials([string(credentialsId: 'acr-admin-password', variable: 'ACR_PASSWORD')]) {
                             sh """
-                                echo "${REGISTRY_PASS}" | \
-                                docker login ${DOCKER_REGISTRY} -u \$REGISTRY_USER --password-stdin
+                                echo "\$ACR_PASSWORD" | docker login ${DOCKER_REGISTRY} -u ${ACR_NAME} --password-stdin
                                 docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
                                 docker push ${BACKEND_IMAGE}:latest
                                 docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
@@ -200,8 +205,16 @@ pipeline {
             }
         }
 
-        // ── Stage 8: Deploy (main branch only) ────────────────────────────
-        // 部署到本地Docker或云平台
+        // ── Stage 8: Deploy ────────────────────────────────────────────────
+        // CI's job ends at publishing a tested, versioned image to the registry above.
+        // Deploying that image to Azure Container Apps is a deliberate manual/gated step —
+        // our Azure tenant (university/student) blocks creating the service principal Jenkins
+        // would need for unattended `az containerapp update`, and separating "CI publishes" from
+        // "a human approves production deploys" is standard practice anyway. After a green
+        // build, deploy with:
+        //   az login
+        //   ./deploy/deploy-azure.sh <BUILD_NUMBER>
+        // (DEPLOY_TARGET=local/aws below remain available for non-Azure targets.)
         stage('Deploy') {
             when {
                 anyOf {
@@ -210,21 +223,15 @@ pipeline {
                 }
             }
             steps {
-                echo 'Deploying...'
-                withCredentials([
-                    string(credentialsId: 'azure-openai-endpoint', variable: 'AZURE_OPENAI_ENDPOINT'),
-                    string(credentialsId: 'azure-openai-key',      variable: 'AZURE_OPENAI_KEY')
-                ]) {
-                    script {
-                        if (env.DEPLOY_TARGET == 'azure') {
-                            // Azure Container Apps 部署
-                            sh './deploy/deploy-azure.sh ${IMAGE_TAG}'
-                        } else if (env.DEPLOY_TARGET == 'aws') {
-                            sh './deploy/deploy-aws.sh ${IMAGE_TAG}'
-                        } else {
-                            // 默认：本地Docker Compose部署
-                            sh './deploy/deploy-local.sh ${IMAGE_TAG}'
-                        }
+                script {
+                    if (env.DEPLOY_TARGET == 'azure') {
+                        echo "Image pushed as ${BACKEND_IMAGE}:${IMAGE_TAG} / ${FRONTEND_IMAGE}:${IMAGE_TAG}."
+                        echo "Azure deploy is a manual step — run: az login && ./deploy/deploy-azure.sh ${IMAGE_TAG}"
+                    } else if (env.DEPLOY_TARGET == 'aws') {
+                        sh './deploy/deploy-aws.sh ${IMAGE_TAG}'
+                    } else {
+                        // 默认：本地Docker Compose部署
+                        sh './deploy/deploy-local.sh ${IMAGE_TAG}'
                     }
                 }
             }

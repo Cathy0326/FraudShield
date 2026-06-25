@@ -14,9 +14,11 @@ echo "=== Local deployment — image tag: ${IMAGE_TAG} ==="
 export BACKEND_TAG="${IMAGE_TAG}"
 export FRONTEND_TAG="${IMAGE_TAG}"
 
-# 重启服务（不影响kafka/redis/zookeeper）
-# Only recreate backend & frontend; leave infra services running
-docker compose -f "${COMPOSE_FILE}" up -d --no-deps backend frontend
+# 启动整个stack；已健康运行的kafka/redis/zookeeper不会被重启，
+# 但首次运行（如全新的Jenkins dind环境）时会被创建，backend才能解析到它们
+# Bring up the whole stack; already-healthy kafka/redis/zookeeper are left alone,
+# but get created on a first run (e.g. a fresh Jenkins dind env) so backend can resolve them
+docker compose -f "${COMPOSE_FILE}" up -d backend frontend
 
 echo "=== Deployment complete ==="
 docker compose -f "${COMPOSE_FILE}" ps

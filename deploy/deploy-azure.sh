@@ -50,11 +50,18 @@ az acr create \
     --output none 2>/dev/null || echo "ACR already exists"
 
 # ── Step 3: Login and push images ─────────────────────────────────────────
+# Skip retag+push when ${BACKEND_IMAGE}/${FRONTEND_IMAGE} already exist locally — CI (Jenkins)
+# builds and pushes them under their final ACR-tagged names directly in earlier pipeline stages.
+# Manual/local runs build a plain "fraudshield-backend:latest" tag instead, so retag from that.
 echo "[3/6] Pushing images to ACR..."
 az acr login --name "${ACR_NAME}"
 
-docker tag fraudshield-backend:latest "${BACKEND_IMAGE}"
-docker tag fraudshield-frontend:latest "${FRONTEND_IMAGE}"
+if ! docker image inspect "${BACKEND_IMAGE}" >/dev/null 2>&1; then
+    docker tag fraudshield-backend:latest "${BACKEND_IMAGE}"
+fi
+if ! docker image inspect "${FRONTEND_IMAGE}" >/dev/null 2>&1; then
+    docker tag fraudshield-frontend:latest "${FRONTEND_IMAGE}"
+fi
 
 docker push "${BACKEND_IMAGE}"
 docker push "${FRONTEND_IMAGE}"
