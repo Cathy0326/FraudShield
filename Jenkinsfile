@@ -185,21 +185,17 @@ pipeline {
                 echo 'Pushing images to registry...'
                 script {
                     if (env.DOCKER_REGISTRY) {
-                        // Azure CLI service principal login, then az acr login (token-based,
-                        // no separate registry password needed since ACR is in our own subscription)
-                        withCredentials([
-                            string(credentialsId: 'azure-sp-client-id',     variable: 'AZURE_CLIENT_ID'),
-                            string(credentialsId: 'azure-sp-client-secret', variable: 'AZURE_CLIENT_SECRET'),
-                            string(credentialsId: 'azure-sp-tenant-id',     variable: 'AZURE_TENANT_ID')
-                        ]) {
+                        // ACR admin credentials (resource-level RBAC) — not an Azure AD service
+                        // principal, so this works even in tenants that block self-service app
+                        // registration (e.g. university/student tenants). Fetch once with:
+                        //   az acr credential show --name <ACR_NAME> --query "passwords[0].value" -o tsv
+                        withCredentials([string(credentialsId: 'acr-admin-password', variable: 'ACR_PASSWORD')]) {
                             sh """
-                                az login --service-principal -u "\$AZURE_CLIENT_ID" -p "\$AZURE_CLIENT_SECRET" --tenant "\$AZURE_TENANT_ID" --output none
-                                az acr login --name ${ACR_NAME}
+                                echo "\$ACR_PASSWORD" | docker login ${DOCKER_REGISTRY} -u ${ACR_NAME} --password-stdin
                                 docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
                                 docker push ${BACKEND_IMAGE}:latest
                                 docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
                                 docker push ${FRONTEND_IMAGE}:latest
-                                az logout
                             """
                         }
                     } else {
@@ -209,8 +205,16 @@ pipeline {
             }
         }
 
-        // ── Stage 8: Deploy (main branch only) ────────────────────────────
-        // 部署到本地Docker或云平台
+        // ── Stage 8: Deploy ────────────────────────────────────────────────
+        // CI's job ends at publishing a tested, versioned image to the registry above.
+        // Deploying that image to Azure Container Apps is a deliberate manual/gated step —
+        // our Azure tenant (university/student) blocks creating the service principal Jenkins
+        // would need for unattended `az containerapp update`, and separating "CI publishes" from
+        // "a human approves production deploys" is standard practice anyway. After a green
+        // build, deploy with:
+        //   az login
+        //   ./deploy/deploy-azure.sh <BUILD_NUMBER>
+        // (DEPLOY_TARGET=local/aws below remain available for non-Azure targets.)
         stage('Deploy') {
             when {
                 anyOf {
@@ -219,29 +223,15 @@ pipeline {
                 }
             }
             steps {
-                echo 'Deploying...'
-                withCredentials([
-                    string(credentialsId: 'azure-openai-endpoint', variable: 'AZURE_OPENAI_ENDPOINT'),
-                    string(credentialsId: 'azure-openai-key',      variable: 'AZURE_OPENAI_KEY'),
-                    string(credentialsId: 'azure-sp-client-id',     variable: 'AZURE_CLIENT_ID'),
-                    string(credentialsId: 'azure-sp-client-secret', variable: 'AZURE_CLIENT_SECRET'),
-                    string(credentialsId: 'azure-sp-tenant-id',     variable: 'AZURE_TENANT_ID')
-                ]) {
-                    script {
-                        if (env.DEPLOY_TARGET == 'azure') {
-                            // Azure Container Apps 部署 — az login first so deploy-azure.sh's
-                            // az containerapp/acr commands are authenticated
-                            sh '''
-                                az login --service-principal -u "$AZURE_CLIENT_ID" -p "$AZURE_CLIENT_SECRET" --tenant "$AZURE_TENANT_ID" --output none
-                                ./deploy/deploy-azure.sh "${IMAGE_TAG}"
-                                az logout
-                            '''
-                        } else if (env.DEPLOY_TARGET == 'aws') {
-                            sh './deploy/deploy-aws.sh ${IMAGE_TAG}'
-                        } else {
-                            // 默认：本地Docker Compose部署
-                            sh './deploy/deploy-local.sh ${IMAGE_TAG}'
-                        }
+                script {
+                    if (env.DEPLOY_TARGET == 'azure') {
+                        echo "Image pushed as ${BACKEND_IMAGE}:${IMAGE_TAG} / ${FRONTEND_IMAGE}:${IMAGE_TAG}."
+                        echo "Azure deploy is a manual step — run: az login && ./deploy/deploy-azure.sh ${IMAGE_TAG}"
+                    } else if (env.DEPLOY_TARGET == 'aws') {
+                        sh './deploy/deploy-aws.sh ${IMAGE_TAG}'
+                    } else {
+                        // 默认：本地Docker Compose部署
+                        sh './deploy/deploy-local.sh ${IMAGE_TAG}'
                     }
                 }
             }
