@@ -19,9 +19,12 @@ set -euo pipefail
 IMAGE_TAG="${1:-latest}"
 
 # ── Configuration (override via env vars) ─────────────────────────────────
-ACR_NAME="${ACR_NAME:-fraudshieldacr}"
+ACR_NAME="${ACR_NAME:-fraudshield5393acr}"
 RESOURCE_GROUP="${RESOURCE_GROUP:-fraudshield-rg}"
-LOCATION="${LOCATION:-eastus}"
+# fraudshield-rg already exists in swedencentral (Azure for Students subscription
+# placed it there) — must match, since Azure rejects a --location that conflicts
+# with an existing resource group.
+LOCATION="${LOCATION:-swedencentral}"
 CONTAINER_APP_ENV="${CONTAINER_APP_ENV:-fraudshield-env}"
 ACR_URI="${ACR_NAME}.azurecr.io"
 
