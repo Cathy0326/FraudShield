@@ -16,7 +16,12 @@
 #   ./deploy/deploy-azure.sh latest
 set -euo pipefail
 
-IMAGE_TAG="${1:-latest}"
+if [[ -z "${1:-}" ]]; then
+    echo "Usage: $0 <image-tag>   (e.g. \$0 36 — the Jenkins build number, or a git SHA)" >&2
+    echo "Refusing to default to 'latest' — that risks deploying a stale/untagged image." >&2
+    exit 1
+fi
+IMAGE_TAG="$1"
 
 # ── Configuration (override via env vars) ─────────────────────────────────
 ACR_NAME="${ACR_NAME:-fraudshield5393acr}"
@@ -159,6 +164,11 @@ echo "    Backend:  https://${BACKEND_FQDN}"
 echo "    Frontend: https://${FRONTEND_FQDN}"
 echo ""
 echo "Next: add secrets via 'az containerapp secret set'"
-echo "  az containerapp secret set --name fraudshield-backend \\"
-echo "    --resource-group ${RESOURCE_GROUP} \\"
-echo "    --secrets openai-key=\${AZURE_OPENAI_KEY} jwt-secret=\${JWT_SECRET} redis-key=\${REDIS_KEY} kafka-jaas-config=\${KAFKA_SASL_JAAS_CONFIG}"
+echo "  On Windows, write each value to a file first and reference it with @<file> —"
+echo "  inlining secrets with embedded quotes on the command line gets mangled by"
+echo "  PowerShell -> cmd.exe -> az.cmd argument re-parsing (bitten by this once already)."
+echo "  e.g.:"
+echo "    \$value | Set-Content -NoNewline -Path secret.txt -Encoding ascii"
+echo "    az containerapp secret set --name fraudshield-backend \\"
+echo "      --resource-group ${RESOURCE_GROUP} \\"
+echo "      --secrets kafka-jaas-config=@secret.txt"
