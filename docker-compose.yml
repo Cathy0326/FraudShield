@@ -108,6 +108,8 @@ services:
       context: ./fraudshield-frontend
       dockerfile: Dockerfile
     container_name: fraudshield-frontend
+    environment:
+      BACKEND_HOST: backend:8080
     networks: [fraudshield-net]
     ports:
       - "3000:80"

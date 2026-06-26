@@ -2,8 +2,14 @@ import axios from 'axios';
 
 // axios实例：所有请求的基础配置
 // Axios instance: shared config for every API call
+//
+// baseURL留空（相对路径）— 生产环境由nginx同源反向代理转发到后端，浏览器看到的是
+// 同一个origin，天然没有CORS问题。本地用`npm run dev`时通过VITE_API_BASE_URL指向后端。
+// Empty baseURL (relative paths) — in production nginx reverse-proxies same-origin to the
+// backend, so the browser never crosses origins. For local `npm run dev`, set
+// VITE_API_BASE_URL to point directly at the backend (see .env.development).
 const api = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 10000,
 });
 
