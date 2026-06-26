@@ -74,6 +74,13 @@ jwt:
   secret: "ZnJhdWRzaGllbGQtc2VjcmV0LWtleS0yMDI2LWhhY2thdGhvbg=="
   expiration-ms: 86400000   # 24 hours in milliseconds
 
+# ── CORS ───────────────────────────────────────────────────────────────────
+# Comma-separated list of allowed browser origins. Override via CORS_ALLOWED_ORIGINS
+# env var in production (the frontend itself talks same-origin through nginx's reverse
+# proxy, so this mainly matters for direct API access during local dev / tooling).
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+
 # ── App-level custom properties ───────────────────────────────────────────────
 fraudshield:
   kafka:
