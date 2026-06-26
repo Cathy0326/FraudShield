@@ -110,12 +110,10 @@ az containerapp update \
     --output none
 
 # ── Step 6: Deploy frontend ────────────────────────────────────────────────
+# BACKEND_HOST is the backend app's name — Container Apps gives every app in the same
+# environment an internal DNS entry resolvable by name, so nginx proxies to it directly
+# without a public-internet round trip (see nginx.conf.template / BACKEND_HOST envsubst).
 echo "[6/6] Deploying frontend..."
-BACKEND_URL=$(az containerapp show \
-    --name fraudshield-backend \
-    --resource-group "${RESOURCE_GROUP}" \
-    --query "properties.configuration.ingress.fqdn" \
-    --output tsv)
 
 az containerapp create \
     --name fraudshield-frontend \
@@ -129,11 +127,15 @@ az containerapp create \
     --memory 0.5Gi \
     --min-replicas 1 \
     --max-replicas 2 \
+    --env-vars \
+        "BACKEND_HOST=fraudshield-backend" \
     --output none 2>/dev/null || \
 az containerapp update \
     --name fraudshield-frontend \
     --resource-group "${RESOURCE_GROUP}" \
     --image "${FRONTEND_IMAGE}" \
+    --set-env-vars \
+        "BACKEND_HOST=fraudshield-backend" \
     --output none
 
 # ── Done: print URLs ───────────────────────────────────────────────────────
