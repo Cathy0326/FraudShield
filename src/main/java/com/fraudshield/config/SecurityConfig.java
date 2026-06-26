@@ -2,6 +2,7 @@ package com.fraudshield.config;
 import com.fraudshield.security.JwtAuthenticationFilter;
 import com.fraudshield.security.JwtTokenProvider;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,6 +25,9 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtTokenProvider tokenProvider;
+
+    @Value("${cors.allowed-origins}")
+    private List<String> allowedOrigins;
 
     public SecurityConfig(JwtTokenProvider tokenProvider) {
         this.tokenProvider = tokenProvider;
@@ -64,7 +68,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:5173"));
+        config.setAllowedOrigins(allowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true);
