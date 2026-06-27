@@ -166,6 +166,20 @@ FRONTEND_FQDN=$(az containerapp show \
 echo "    Backend:  https://${BACKEND_FQDN}"
 echo "    Frontend: https://${FRONTEND_FQDN}"
 echo ""
+
+# ── Step 7: Smoke test (optional) ───────────────────────────────────────────
+# Set SMOKE_TEST_USER/SMOKE_TEST_PASSWORD to verify the deployment actually
+# works end-to-end (login + proxied API call), not just that containers came up.
+if [[ -n "${SMOKE_TEST_USER:-}" && -n "${SMOKE_TEST_PASSWORD:-}" ]]; then
+    echo "[7/7] Running smoke test..."
+    "$(dirname "$0")/smoke-test.sh" \
+        "https://${BACKEND_FQDN}" "https://${FRONTEND_FQDN}" \
+        "${SMOKE_TEST_USER}" "${SMOKE_TEST_PASSWORD}"
+else
+    echo "Skipping smoke test — set SMOKE_TEST_USER/SMOKE_TEST_PASSWORD to enable it:"
+    echo "  ./deploy/smoke-test.sh https://${BACKEND_FQDN} https://${FRONTEND_FQDN} <user> <password>"
+fi
+echo ""
 echo "Next: add secrets via 'az containerapp secret set'"
 echo "  On Windows, write each value to a file first and reference it with @<file> —"
 echo "  inlining secrets with embedded quotes on the command line gets mangled by"
