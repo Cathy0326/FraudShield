@@ -100,3 +100,21 @@ azure:
 # Set ai.enabled=false to skip all LLM calls (useful for local dev without credentials)
 ai:
   enabled: true
+
+# ── Observability ──────────────────────────────────────────────────────────
+# Only expose health/info/prometheus — never the full endpoint set (env, beans,
+# heapdump etc. leak internals and are a real attack surface if left open).
+# Scraping is unauthenticated here; in a real deployment this is locked down at
+# the network layer (Container Apps internal ingress / k8s NetworkPolicy), not
+# behind app-level auth, since Prometheus itself doesn't send a Bearer token.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+  metrics:
+    tags:
+      application: fraudshield
