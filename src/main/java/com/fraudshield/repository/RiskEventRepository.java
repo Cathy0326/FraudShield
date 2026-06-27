@@ -21,4 +21,9 @@ public interface RiskEventRepository extends JpaRepository<RiskEvent, Long> {
 
     List<RiskEvent> findByRiskLevelAndDetectedAtBetween(
             String riskLevel, LocalDateTime start, LocalDateTime end);
+
+    List<RiskEvent> findByUserIdOrderByDetectedAtDesc(String userId);
+
+    // Used to spot fraud rings: distinct accounts that have ordered from the same IP.
+    List<RiskEvent> findByIpAddressOrderByDetectedAtDesc(String ipAddress);
 }

@@ -2,6 +2,7 @@ package com.fraudshield.controller;
 
 import com.fraudshield.dto.DashboardStatsDTO;
 import com.fraudshield.dto.RiskEventDTO;
+import com.fraudshield.dto.UserRiskProfileDTO;
 import com.fraudshield.model.AiAnalysis;
 import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskResult;
@@ -71,6 +72,12 @@ public class RiskEventController {
                 .explanation(event.getExplanation())
                 .build();
         return ResponseEntity.ok(aiService.analyze(order, riskResult));
+    }
+
+    // GET /api/risk-events/user/{userId}/profile — order history + linked accounts for this user
+    @GetMapping("/user/{userId}/profile")
+    public ResponseEntity<UserRiskProfileDTO> getUserRiskProfile(@PathVariable String userId) {
+        return ResponseEntity.ok(riskEventService.getUserRiskProfile(userId));
     }
 
     // DELETE /api/risk-events/{id} — ROLE_ADMIN only
