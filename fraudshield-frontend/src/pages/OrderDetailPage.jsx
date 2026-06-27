@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getEventByOrderId, getAiAnalysis } from '../services/api';
+import { getEventByOrderId, getAiAnalysis, getUserRiskProfile } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -13,6 +13,8 @@ export default function OrderDetailPage() {
   const [error,     setError]     = useState('');
   const [ai,        setAi]        = useState(null);   // AI analysis (loaded separately)
   const [aiLoading, setAiLoading] = useState(false);
+  const [profile,        setProfile]        = useState(null); // user history + linked accounts
+  const [profileLoading, setProfileLoading] = useState(true);
 
   useEffect(() => {
     getEventByOrderId(orderId)
@@ -30,9 +32,17 @@ export default function OrderDetailPage() {
             aiEnhanced:     true,
           });
         }
+        setLoading(false);
+        return getUserRiskProfile(data.userId)
+          .then(setProfile)
+          .catch(() => {}) // profile is a supplementary panel — its failure shouldn't block the order view
+          .finally(() => setProfileLoading(false));
       })
-      .catch(() => setError('Order not found or an error occurred.'))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        setError('Order not found or an error occurred.');
+        setLoading(false);
+        setProfileLoading(false);
+      });
   }, [orderId]);
 
   function runAiAnalysis() {
@@ -211,6 +221,84 @@ export default function OrderDetailPage() {
                 <p className="text-sm text-slate-500">
                   Click "Run AI Analysis" to get an LLM-powered second opinion on this order.
                 </p>
+              )}
+            </div>
+
+            {/* User Risk Profile Card — this user's order history + shared-IP linked accounts */}
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-5">
+              <h2 className="text-lg font-semibold text-white">User Risk Profile</h2>
+
+              {profileLoading ? <LoadingSpinner /> : !profile ? (
+                <p className="text-sm text-slate-500">No profile data available for this user.</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    {[
+                      ['Total Orders', profile.totalOrders],
+                      ['High Risk',    profile.highRiskCount],
+                      ['Medium Risk',  profile.mediumRiskCount],
+                      ['Total Amount', `$${profile.totalAmount?.toFixed(2)}`],
+                    ].map(([label, val]) => (
+                      <div key={label}>
+                        <dt className="text-xs text-slate-500 uppercase tracking-wide">{label}</dt>
+                        <dd className="text-sm text-slate-200 font-mono mt-0.5">{val}</dd>
+                      </div>
+                    ))}
+                  </div>
+
+                  {profile.linkedUserIds?.length > 0 && (
+                    <div className="p-3 bg-amber-900/20 border border-amber-500/30 rounded-lg">
+                      <p className="text-xs text-amber-400 uppercase tracking-wide mb-2">
+                        ⚠ Linked accounts (shared IP)
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {profile.linkedUserIds.map(id => (
+                          <span
+                            key={id}
+                            className="text-xs bg-amber-900/40 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full"
+                          >
+                            {id}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="text-xs text-slate-400 uppercase tracking-wide mb-2">Order History</p>
+                    {profile.recentEvents?.length === 0 ? (
+                      <p className="text-sm text-slate-500">No other orders from this user.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-dark-border text-slate-400 text-xs uppercase tracking-wide">
+                              {['Time', 'Order ID', 'Amount', 'Risk'].map(h => (
+                                <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-dark-border">
+                            {profile.recentEvents.map(e => (
+                              <tr
+                                key={e.id}
+                                onClick={() => e.orderId !== orderId && navigate(`/orders/${e.orderId}`)}
+                                className={e.orderId === orderId ? 'bg-indigo-900/20' : 'hover:bg-dark-bg/50 cursor-pointer transition-colors'}
+                              >
+                                <td className="px-3 py-2 text-slate-400 whitespace-nowrap">
+                                  {e.detectedAt ? new Date(e.detectedAt).toLocaleString() : '—'}
+                                </td>
+                                <td className="px-3 py-2 font-mono text-xs text-slate-300">{e.orderId}</td>
+                                <td className="px-3 py-2 text-slate-300">${e.amount?.toFixed(2)}</td>
+                                <td className="px-3 py-2"><RiskBadge riskLevel={e.riskLevel} /></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </>

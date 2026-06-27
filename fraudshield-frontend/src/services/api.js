@@ -58,4 +58,7 @@ export const triggerTestOrders = () =>
 export const getAiAnalysis = (orderId) =>
   api.get(`/api/risk-events/${orderId}/ai-analysis`).then((r) => r.data);
 
+export const getUserRiskProfile = (userId) =>
+  api.get(`/api/risk-events/user/${userId}/profile`).then((r) => r.data);
+
 export default api;

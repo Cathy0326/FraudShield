@@ -3,6 +3,7 @@ package com.fraudshield.service;
 import com.fraudshield.dto.DashboardStatsDTO;
 import com.fraudshield.dto.HourlyStatDTO;
 import com.fraudshield.dto.RiskEventDTO;
+import com.fraudshield.dto.UserRiskProfileDTO;
 import com.fraudshield.exception.ResourceNotFoundException;
 import com.fraudshield.model.RiskEvent;
 import com.fraudshield.repository.RiskEventRepository;
@@ -93,6 +94,47 @@ public class RiskEventService {
      */
     public void incrementNormalCounter() {
         redisTemplate.opsForValue().increment(NORMAL_COUNTER_KEY);
+    }
+
+    /**
+     * 用户风险画像 — 该用户的历史订单及命中规则，以及与其共享IP的其他账号
+     * Per-user risk profile: this user's order/risk history, plus other userIds
+     * seen ordering from the same IP(s) — a fraud-ring signal no single-order rule sees.
+     */
+    public UserRiskProfileDTO getUserRiskProfile(String userId) {
+        List<RiskEvent> history = repository.findByUserIdOrderByDetectedAtDesc(userId);
+
+        long high   = history.stream().filter(e -> "HIGH".equals(e.getRiskLevel())).count();
+        long medium = history.stream().filter(e -> "MEDIUM".equals(e.getRiskLevel())).count();
+        long low    = history.stream().filter(e -> "LOW".equals(e.getRiskLevel())).count();
+        double totalAmount = history.stream()
+                .map(RiskEvent::getAmount)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .sum();
+
+        Set<String> ips = history.stream()
+                .map(RiskEvent::getIpAddress)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<String> linkedUserIds = ips.stream()
+                .flatMap(ip -> repository.findByIpAddressOrderByDetectedAtDesc(ip).stream())
+                .map(RiskEvent::getUserId)
+                .filter(id -> id != null && !id.equals(userId))
+                .distinct()
+                .collect(Collectors.toList());
+
+        return UserRiskProfileDTO.builder()
+                .userId(userId)
+                .totalOrders(history.size())
+                .highRiskCount(high)
+                .mediumRiskCount(medium)
+                .lowRiskCount(low)
+                .totalAmount(Math.round(totalAmount * 100.0) / 100.0)
+                .recentEvents(history.stream().map(RiskEventDTO::fromEntity).collect(Collectors.toList()))
+                .linkedUserIds(linkedUserIds)
+                .build();
     }
 
     public void deleteEvent(Long id) {
