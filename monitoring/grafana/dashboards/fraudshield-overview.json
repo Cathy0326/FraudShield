@@ -78,6 +78,44 @@
           "legendFormat": "{{topic}}"
         }
       ]
+    },
+    {
+      "id": 7,
+      "title": "Historic order mix by risk level (cumulative DB counts)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "description": "From DashboardMetricsExporter — republishes the same DB-backed dashboard stats RiskEventService already aggregates, as a time series so trends become visible (not just the current snapshot).",
+      "targets": [
+        {
+          "expr": "fraudshield_dashboard_risk_level_count",
+          "legendFormat": "{{riskLevel}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Risk rate over time (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "fraudshield_dashboard_risk_rate_percent",
+          "legendFormat": "risk rate %"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Top triggered rules (historic hit counts)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "description": "Which detection rules are firing most over time — useful for spotting a rule that's gone noisy (too many false positives) or a fraud pattern that's shifting to evade a specific rule.",
+      "targets": [
+        {
+          "expr": "fraudshield_dashboard_rule_hit_count",
+          "legendFormat": "{{rule}}"
+        }
+      ]
     }
   ]
 }
