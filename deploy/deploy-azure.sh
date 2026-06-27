@@ -110,11 +110,14 @@ az containerapp create \
         "KAFKA_SECURITY_PROTOCOL=${KAFKA_SECURITY_PROTOCOL:-PLAINTEXT}" \
         "KAFKA_SASL_MECHANISM=PLAIN" \
         "KAFKA_SASL_JAAS_CONFIG=secretref:kafka-jaas-config" \
+        "CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://fraudshield-frontend.salmonmushroom-44fb6555.swedencentral.azurecontainerapps.io}" \
     --output none 2>/dev/null || \
 az containerapp update \
     --name fraudshield-backend \
     --resource-group "${RESOURCE_GROUP}" \
     --image "${BACKEND_IMAGE}" \
+    --set-env-vars \
+        "CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://fraudshield-frontend.salmonmushroom-44fb6555.swedencentral.azurecontainerapps.io}" \
     --output none
 
 # ── Step 6: Deploy frontend ────────────────────────────────────────────────
