@@ -18,3 +18,4 @@ mvn test-compile dependency:build-classpath -Dmdep.outputFile=target/cp.txt -q
 java -cp "target/test-classes:target/classes:$(cat target/cp.txt)" \
     com.fraudshield.eval.FraudExplanationEvalHarness
 ```
+See [SECURITY.md](SECURITY.md) for security incidents found and fixed in this project, with root-cause analysis.
