@@ -16,7 +16,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/risk-events")
-@CrossOrigin(origins = "http://localhost:3000")
 public class RiskEventController {
 
     private final RiskEventService riskEventService;
