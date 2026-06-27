@@ -165,7 +165,12 @@ pipeline {
                                  .
 
                     # Frontend image (multi-stage: node → nginx-alpine)
-                    docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                    # --no-cache: the legacy (non-BuildKit) builder has repeatedly served a
+                    # stale cached layer for COPY steps even after file contents changed
+                    # (e.g. nginx.conf.template edits silently not picked up) — context is
+                    # tiny (~260KB) so a full rebuild here costs only a few seconds.
+                    docker build --no-cache \
+                                 -t ${FRONTEND_IMAGE}:${IMAGE_TAG} \
                                  -t ${FRONTEND_IMAGE}:latest \
                                  ./fraudshield-frontend
                 """
