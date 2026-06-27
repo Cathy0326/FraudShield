@@ -49,7 +49,9 @@ public class SecurityConfig {
                     "/h2-console/**",
                     "/auth/login",
                     "/auth/register",
-                    "/test/**"           // test endpoints remain public for dev convenience
+                    "/test/**",          // test endpoints remain public for dev convenience
+                    "/actuator/health",
+                    "/actuator/prometheus"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
