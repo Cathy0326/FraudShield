@@ -28,6 +28,7 @@ class RiskEventServiceTest {
     @Mock RiskEventRepository repository;
     @Mock StringRedisTemplate redisTemplate;
     @Mock ValueOperations<String, String> valueOps;
+    @Mock AuditChainService auditChain;
 
     private RiskEventService service;
 
@@ -35,7 +36,7 @@ class RiskEventServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new RiskEventService(repository, redisTemplate);
+        service = new RiskEventService(repository, redisTemplate, auditChain);
 
         LocalDateTime now = LocalDateTime.now();
         event1 = buildEvent(1L, "ORD-001", "HIGH",   1.0,  "BlacklistRule",         now);
@@ -135,6 +136,8 @@ class RiskEventServiceTest {
         assertThat(dto.getReviewedBy()).isEqualTo("admin");
         assertThat(dto.getReviewedAt()).isNotNull();
         assertThat(dto.getReviewNotes()).isEqualTo("chargeback reported");
+        // 每个决定都追加到防篡改审计链 / every decision lands on the audit chain
+        verify(auditChain).append("ORD-001", "CONFIRMED_FRAUD", "admin");
     }
 
     @Test
