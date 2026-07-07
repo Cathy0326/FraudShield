@@ -28,8 +28,16 @@ public class RiskEvent {
     @Column(unique = true)
     private String orderId;
 
+    // ── PII字段落库加密（AES-256-GCM确定性加密，等值查询仍可用）─────────────────
+    // PII columns are encrypted at rest (deterministic AES-256-GCM, so equality
+    // queries still work). orderId deliberately stays plaintext: it's a system
+    // identifier, not personal data, and it appears in logs and URLs.
+    @Convert(converter = com.fraudshield.crypto.EncryptedStringConverter.class)
     private String userId;
+
+    @Convert(converter = com.fraudshield.crypto.EncryptedStringConverter.class)
     private String ipAddress;
+
     private Double amount;
 
     // 存储枚举名称字符串，方便SQL查询和未来迁移

@@ -86,6 +86,12 @@ fraudshield:
   kafka:
     topic:
       order-events: order-events   # topic name used by producers/consumers
+  encryption:
+    # PII落库加密密钥：32字节的Base64（生成：openssl rand -base64 32）
+    # 未设置时PII明文存储并打启动警告 —— 仅限本地开发
+    # PII-at-rest key: 32 bytes, base64 (generate: openssl rand -base64 32).
+    # Unset = plaintext storage with a startup warning — local dev only.
+    key: ${FRAUDSHIELD_ENCRYPTION_KEY:}
 
 # ── Azure OpenAI ──────────────────────────────────────────────────────────────
 # 凭证通过环境变量或.env文件注入（不提交到git）

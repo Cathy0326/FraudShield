@@ -95,6 +95,12 @@ services:
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
       AZURE_OPENAI_KEY: ${AZURE_OPENAI_KEY:-}
       AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-gpt-4.1-mini}
+      # PII落库加密密钥 —— compose默认值仅供本地demo；真实部署必须用自己的密钥覆盖
+      # （openssl rand -base64 32）并通过secret管理注入，绝不能写进compose文件
+      # PII-at-rest encryption key. The default is for local demo ONLY — real
+      # deployments must override with their own key (openssl rand -base64 32)
+      # injected from a secret store, never a compose file.
+      FRAUDSHIELD_ENCRYPTION_KEY: ${FRAUDSHIELD_ENCRYPTION_KEY:-HSQyfTqIYzNQXyr9E9FWp7T9PjS5dmW7f3mtYsy77qI=}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
