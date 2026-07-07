@@ -26,10 +26,13 @@ public class RiskEventService {
 
     private final RiskEventRepository repository;
     private final StringRedisTemplate redisTemplate;
+    private final AuditChainService auditChain;
 
-    public RiskEventService(RiskEventRepository repository, StringRedisTemplate redisTemplate) {
+    public RiskEventService(RiskEventRepository repository, StringRedisTemplate redisTemplate,
+                            AuditChainService auditChain) {
         this.repository    = repository;
         this.redisTemplate = redisTemplate;
+        this.auditChain    = auditChain;
     }
 
     public List<RiskEventDTO> getRecentEvents(int limit) {
@@ -200,7 +203,12 @@ public class RiskEventService {
         event.setReviewedBy(reviewer);
         event.setReviewedAt(LocalDateTime.now());
         event.setReviewNotes(notes);
-        return RiskEventDTO.fromEntity(repository.save(event));
+        RiskEventDTO saved = RiskEventDTO.fromEntity(repository.save(event));
+
+        // 每个审核决定追加为审计链上的一环（防篡改，见AuditChainService）
+        // Every decision is appended to the tamper-evident audit chain
+        auditChain.append(orderId, decision, reviewer);
+        return saved;
     }
 
     /**
