@@ -10,6 +10,7 @@ import com.fraudshield.repository.RiskEventRepository;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -94,6 +95,25 @@ public class RiskEventService {
      */
     public void incrementNormalCounter() {
         redisTemplate.opsForValue().increment(NORMAL_COUNTER_KEY);
+    }
+
+    /**
+     * 幂等版计数器：Kafka at-least-once语义下同一消息可能被投递多次，
+     * 用SETNX标记orderId是否已计数过，只有首次处理才增加计数。
+     * 标记24小时后过期 —— 重复投递（重试/rebalance）都发生在分钟级窗口内，
+     * 无需永久保留去重标记。
+     *
+     * Idempotent counter: under Kafka's at-least-once semantics the same message can
+     * be delivered more than once. A SETNX marker per orderId ensures the counter only
+     * increments on first processing. Markers expire after 24h — redeliveries (retries,
+     * rebalances) happen within minutes, so dedup state doesn't need to live forever.
+     */
+    public void incrementNormalCounterIdempotent(String orderId) {
+        Boolean firstTime = redisTemplate.opsForValue().setIfAbsent(
+                "processed:normal:" + orderId, "1", Duration.ofHours(24));
+        if (Boolean.TRUE.equals(firstTime)) {
+            redisTemplate.opsForValue().increment(NORMAL_COUNTER_KEY);
+        }
     }
 
     /**
