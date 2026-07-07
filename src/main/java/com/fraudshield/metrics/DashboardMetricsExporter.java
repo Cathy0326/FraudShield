@@ -66,8 +66,8 @@ public class DashboardMetricsExporter {
                 dollarsAtRiskGauge, AtomicReference::get);
         meterRegistry.gauge("fraudshield.review.avg_time_to_decision_minutes",
                 avgTimeToDecisionGauge, AtomicReference::get);
-        meterRegistry.gauge("fraudshield.ai.enhanced_total", aiEnhancedGauge);
-        meterRegistry.gauge("fraudshield.ai.fallback_total", aiFallbackGauge);
+        meterRegistry.gauge("fraudshield.ai.enhanced", aiEnhancedGauge);
+        meterRegistry.gauge("fraudshield.ai.fallback", aiFallbackGauge);
     }
 
     @Scheduled(fixedRate = 15_000)
@@ -118,7 +118,7 @@ public class DashboardMetricsExporter {
     private void updateDecisionGauge(String outcome, long count) {
         decisionGauges.computeIfAbsent(outcome, o -> {
             AtomicLong holder = new AtomicLong();
-            meterRegistry.gauge("fraudshield.review.decisions_total",
+            meterRegistry.gauge("fraudshield.review.decisions",
                     List.of(Tag.of("outcome", o)), holder);
             return holder;
         }).set(count);
