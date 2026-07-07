@@ -1,5 +1,5 @@
 {
-  "title": "FraudShield Overview",
+  "title": "FraudShield — Decision Quality & Pipeline",
   "uid": "fraudshield-overview",
   "timezone": "browser",
   "schemaVersion": 39,
@@ -8,34 +8,97 @@
   "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
+      "id": 100,
+      "title": "── Decision quality — is fraud review keeping up, and are decisions good? ──",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
       "id": 1,
-      "title": "Request rate (req/s)",
+      "title": "Review queue depth",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "description": "Orders awaiting a human decision. A rising line means reviewers are falling behind detection.",
       "targets": [
         {
-          "expr": "sum(rate(http_server_requests_seconds_count{application=\"fraudshield\"}[1m])) by (uri, status)",
-          "legendFormat": "{{uri}} [{{status}}]"
+          "expr": "fraudshield_review_queue_depth",
+          "legendFormat": "pending orders"
         }
       ]
     },
     {
       "id": 2,
-      "title": "p95 request latency",
+      "title": "$ at risk (pending review)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "description": "Total order value sitting undecided in the queue — exposure in dollars, not counts.",
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=\"fraudshield\"}[5m])) by (le, uri))",
-          "legendFormat": "{{uri}}"
+          "expr": "fraudshield_review_dollars_at_risk",
+          "legendFormat": "$ at risk"
         }
       ]
     },
     {
       "id": 3,
+      "title": "Avg time-to-decision (minutes)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "description": "Average minutes from detection to human decision — the review SLA.",
+      "targets": [
+        {
+          "expr": "fraudshield_review_avg_time_to_decision_minutes",
+          "legendFormat": "avg minutes"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Decisions by outcome (cumulative)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "description": "Label production rate. A growing FALSE_POSITIVE share means detection rules need tuning — see the Rule Precision report.",
+      "targets": [
+        {
+          "expr": "fraudshield_review_decisions_total",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "AI second opinion: enhanced vs fallback",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "description": "How often the LLM analysis actually ran vs fell back (bad credentials, timeouts, parse failures). A rising fallback line is an integration problem invisible in the app UI.",
+      "targets": [
+        {
+          "expr": "fraudshield_ai_enhanced_total",
+          "legendFormat": "AI enhanced"
+        },
+        {
+          "expr": "fraudshield_ai_fallback_total",
+          "legendFormat": "fallback"
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "title": "── Streaming pipeline (Kafka) — is detection itself healthy? ──",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
       "title": "Risk events by level (rate)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "description": "Detection throughput from the rule engine (counter, engine-side).",
       "targets": [
         {
           "expr": "sum(rate(fraudshield_risk_events_total[1m])) by (riskLevel)",
@@ -44,10 +107,10 @@
       ]
     },
     {
-      "id": 4,
+      "id": 7,
       "title": "Rule-evaluation duration (p95)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(fraudshield_risk_evaluation_duration_seconds_bucket[5m])) by (le))",
@@ -56,22 +119,11 @@
       ]
     },
     {
-      "id": 5,
-      "title": "JVM heap used",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "targets": [
-        {
-          "expr": "jvm_memory_used_bytes{application=\"fraudshield\", area=\"heap\"}",
-          "legendFormat": "{{id}}"
-        }
-      ]
-    },
-    {
-      "id": 6,
+      "id": 8,
       "title": "Kafka consumer lag",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "description": "Messages behind on order-events. Sustained lag means orders are being scored late — sub-second evaluation doesn't help if the message waited in the topic.",
       "targets": [
         {
           "expr": "sum(kafka_consumer_fetch_manager_records_lag{application=\"fraudshield\"}) by (topic)",
@@ -80,40 +132,46 @@
       ]
     },
     {
-      "id": 7,
-      "title": "Historic order mix by risk level (cumulative DB counts)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "description": "From DashboardMetricsExporter — republishes the same DB-backed dashboard stats RiskEventService already aggregates, as a time series so trends become visible (not just the current snapshot).",
-      "targets": [
-        {
-          "expr": "fraudshield_dashboard_risk_level_count",
-          "legendFormat": "{{riskLevel}}"
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "title": "Risk rate over time (%)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
-      "targets": [
-        {
-          "expr": "fraudshield_dashboard_risk_rate_percent",
-          "legendFormat": "risk rate %"
-        }
-      ]
+      "id": 102,
+      "title": "── System ──",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "collapsed": false,
+      "panels": []
     },
     {
       "id": 9,
-      "title": "Top triggered rules (historic hit counts)",
+      "title": "Request rate (req/s)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
-      "description": "Which detection rules are firing most over time — useful for spotting a rule that's gone noisy (too many false positives) or a fraud pattern that's shifting to evade a specific rule.",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 27 },
       "targets": [
         {
-          "expr": "fraudshield_dashboard_rule_hit_count",
-          "legendFormat": "{{rule}}"
+          "expr": "sum(rate(http_server_requests_seconds_count{application=\"fraudshield\"}[1m])) by (uri, status)",
+          "legendFormat": "{{uri}} [{{status}}]"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "p95 request latency",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 27 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=\"fraudshield\"}[5m])) by (le, uri))",
+          "legendFormat": "{{uri}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "JVM heap used",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 27 },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{application=\"fraudshield\", area=\"heap\"}",
+          "legendFormat": "{{id}}"
         }
       ]
     }

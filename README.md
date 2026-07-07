@@ -91,15 +91,26 @@ java -cp "target/test-classes:target/classes:$(cat target/cp.txt)" \
 
 ## Observability
 
-Two dashboards for two audiences:
+Two dashboards, one rule: **every metric has exactly one owner** — the anti-pattern
+isn't having two dashboards, it's the same number computed in two places that can
+disagree.
 
-- **React dashboard** (`localhost:3000`) — the fraud-ops product: live KPIs, risk
-  distribution, review queue, per-order drill-down with user risk profile.
-- **Grafana** (`localhost:3001`, via Prometheus at `localhost:9090`) — the engineering
-  view: request rates, p95 latency, JVM heap, Kafka consumer lag, plus historic
-  risk-level and rule-hit trends republished as Prometheus gauges by a scheduled
-  exporter (Prometheus's own scrape history provides the time series — no custom
-  storage).
+- **React dashboard** (`localhost:3000`) — owns the *business snapshot*: risk
+  distribution, rule hits, review queue, per-order drill-down. Source of truth:
+  the application DB/Redis.
+- **Grafana** (`localhost:3001`, via Prometheus at `localhost:9090`) — owns
+  everything that only makes sense *over time*, in three rows:
+  1. **Decision quality** (the headline row — this is what the project is for):
+     review-queue depth, **$ at risk** pending review, average time-to-decision
+     (the review SLA), decisions by outcome, and AI-enhanced vs fallback counts —
+     a rising fallback line is an LLM integration problem invisible in the app UI.
+  2. **Streaming pipeline**: risk-event throughput by level, rule-evaluation p95,
+     Kafka consumer lag — sub-second scoring doesn't help if the message waited
+     in the topic.
+  3. **System**: request rate, p95 latency, JVM heap.
+
+Prometheus's own scrape history provides the time dimension — no custom time-series
+storage anywhere.
 
 ## Quick start
 
