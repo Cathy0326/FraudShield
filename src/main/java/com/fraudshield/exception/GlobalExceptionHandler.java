@@ -33,6 +33,14 @@ public class GlobalExceptionHandler {
                 .body(errorBody("Forbidden", ex.getMessage()));
     }
 
+    // 状态冲突（如重复审核同一订单）→ 409，区别于参数错误的400
+    // State conflicts (e.g. re-reviewing an already-decided order) are 409, not 400
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleConflict(IllegalStateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(errorBody("Conflict", ex.getMessage()));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleBadRequest(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)

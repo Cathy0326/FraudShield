@@ -122,6 +122,72 @@ class RiskEventServiceTest {
         verify(valueOps).increment("counter:normal_orders");
     }
 
+    // ── 审核工作流 / Review workflow ──────────────────────────────────────────
+
+    @Test
+    void reviewEvent_pendingEvent_transitionsAndRecordsReviewer() {
+        when(repository.findByOrderId("ORD-001")).thenReturn(Optional.of(event1));
+        when(repository.save(any(RiskEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RiskEventDTO dto = service.reviewEvent("ORD-001", "CONFIRMED_FRAUD", "admin", "chargeback reported");
+
+        assertThat(dto.getReviewStatus()).isEqualTo("CONFIRMED_FRAUD");
+        assertThat(dto.getReviewedBy()).isEqualTo("admin");
+        assertThat(dto.getReviewedAt()).isNotNull();
+        assertThat(dto.getReviewNotes()).isEqualTo("chargeback reported");
+    }
+
+    @Test
+    void reviewEvent_legacyNullStatus_isTreatedAsPending() {
+        // 该列加入前写入的行status为NULL，必须仍可审核
+        // Rows written before the column existed must still be reviewable
+        event1.setReviewStatus(null);
+        when(repository.findByOrderId("ORD-001")).thenReturn(Optional.of(event1));
+        when(repository.save(any(RiskEvent.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RiskEventDTO dto = service.reviewEvent("ORD-001", "APPROVED", "operator", null);
+
+        assertThat(dto.getReviewStatus()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    void reviewEvent_alreadyReviewed_throwsConflict() {
+        // 终态不可变：重复审核会污染规则精度统计的标注数据
+        // Terminal states are immutable — re-reviewing corrupts label data
+        event1.setReviewStatus("FALSE_POSITIVE");
+        event1.setReviewedBy("operator");
+        when(repository.findByOrderId("ORD-001")).thenReturn(Optional.of(event1));
+
+        assertThatThrownBy(() -> service.reviewEvent("ORD-001", "CONFIRMED_FRAUD", "admin", null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already reviewed");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void reviewEvent_invalidDecision_throwsBadRequest() {
+        assertThatThrownBy(() -> service.reviewEvent("ORD-001", "MAYBE_FRAUD", "admin", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("MAYBE_FRAUD");
+        verify(repository, never()).findByOrderId(any());
+    }
+
+    @Test
+    void reviewEvent_unknownOrder_throwsNotFound() {
+        when(repository.findByOrderId("NOPE")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.reviewEvent("NOPE", "APPROVED", "admin", null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getReviewQueue_returnsPendingEvents() {
+        when(repository.findPendingReview()).thenReturn(List.of(event1, event2));
+
+        List<RiskEventDTO> queue = service.getReviewQueue();
+
+        assertThat(queue).hasSize(2);
+        assertThat(queue.get(0).getReviewStatus()).isEqualTo("PENDING_REVIEW");
     // ── 幂等计数器：首次处理 → SETNX成功 → 计数+1 ─────────────────────────────
     // Idempotent counter: first delivery sets the marker and increments
     @Test
