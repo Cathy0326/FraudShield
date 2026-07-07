@@ -68,11 +68,11 @@ class DashboardMetricsExporterTest {
 
         exporter.export();
 
-        assertThat(gauge("fraudshield.review.decisions_total", "outcome", "CONFIRMED_FRAUD"))
+        assertThat(gauge("fraudshield.review.decisions", "outcome", "CONFIRMED_FRAUD"))
                 .isEqualTo(2.0);
-        assertThat(gauge("fraudshield.review.decisions_total", "outcome", "FALSE_POSITIVE"))
+        assertThat(gauge("fraudshield.review.decisions", "outcome", "FALSE_POSITIVE"))
                 .isEqualTo(1.0);
-        assertThat(gauge("fraudshield.review.decisions_total", "outcome", "APPROVED"))
+        assertThat(gauge("fraudshield.review.decisions", "outcome", "APPROVED"))
                 .isEqualTo(0.0);
     }
 
@@ -98,8 +98,8 @@ class DashboardMetricsExporterTest {
 
         exporter.export();
 
-        assertThat(gauge("fraudshield.ai.enhanced_total")).isEqualTo(2.0);
-        assertThat(gauge("fraudshield.ai.fallback_total")).isEqualTo(1.0);
+        assertThat(gauge("fraudshield.ai.enhanced")).isEqualTo(2.0);
+        assertThat(gauge("fraudshield.ai.fallback")).isEqualTo(1.0);
     }
 
     @Test
