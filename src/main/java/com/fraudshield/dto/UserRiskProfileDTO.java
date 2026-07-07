@@ -25,4 +25,9 @@ public class UserRiskProfileDTO {
     // signal (shared infrastructure across "different" accounts), distinct from anything
     // a single-order rule can see.
     private List<String> linkedUserIds;
+
+    // 图传播分数：多跳团伙信号（linkedUserIds只能看两跳，这个能看整个连通分量）
+    // Graph-propagated score: the multi-hop ring signal — linkedUserIds sees two hops,
+    // this sees the whole connected component around confirmed fraud.
+    private Double graphRiskScore;
 }

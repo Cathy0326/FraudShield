@@ -1,9 +1,11 @@
 package com.fraudshield.controller;
 
 import com.fraudshield.dto.DashboardStatsDTO;
+import com.fraudshield.dto.GraphRiskScoreDTO;
 import com.fraudshield.dto.RiskEventDTO;
 import com.fraudshield.dto.RulePrecisionDTO;
 import com.fraudshield.dto.UserRiskProfileDTO;
+import com.fraudshield.service.GraphRiskService;
 import com.fraudshield.model.AiAnalysis;
 import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskResult;
@@ -23,10 +25,13 @@ public class RiskEventController {
 
     private final RiskEventService riskEventService;
     private final AzureOpenAIService aiService;
+    private final GraphRiskService graphRiskService;
 
-    public RiskEventController(RiskEventService riskEventService, AzureOpenAIService aiService) {
+    public RiskEventController(RiskEventService riskEventService, AzureOpenAIService aiService,
+                               GraphRiskService graphRiskService) {
         this.riskEventService = riskEventService;
         this.aiService        = aiService;
+        this.graphRiskService = graphRiskService;
     }
 
     // GET /api/risk-events/recent?limit=10
@@ -107,7 +112,16 @@ public class RiskEventController {
     // GET /api/risk-events/user/{userId}/profile — order history + linked accounts for this user
     @GetMapping("/user/{userId}/profile")
     public ResponseEntity<UserRiskProfileDTO> getUserRiskProfile(@PathVariable String userId) {
-        return ResponseEntity.ok(riskEventService.getUserRiskProfile(userId));
+        UserRiskProfileDTO profile = riskEventService.getUserRiskProfile(userId);
+        profile.setGraphRiskScore(graphRiskService.getUserRiskScore(userId));
+        return ResponseEntity.ok(profile);
+    }
+
+    // GET /api/risk-events/graph-risk?limit=10 — users closest to confirmed fraud on the graph
+    @GetMapping("/graph-risk")
+    public ResponseEntity<List<GraphRiskScoreDTO>> getGraphRisk(
+            @RequestParam(defaultValue = "10") int limit) {
+        return ResponseEntity.ok(graphRiskService.topRiskyUsers(limit));
     }
 
     // DELETE /api/risk-events/{id} — ROLE_ADMIN only
