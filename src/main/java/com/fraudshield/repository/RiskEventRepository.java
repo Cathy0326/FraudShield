@@ -33,4 +33,10 @@ public interface RiskEventRepository extends JpaRepository<RiskEvent, Long> {
 
     // Used to spot fraud rings: distinct accounts that have ordered from the same IP.
     List<RiskEvent> findByIpAddressOrderByDetectedAtDesc(String ipAddress);
+
+    // ── 审核标注反哺检测 / review labels feeding back into detection ──────────
+    Long countByUserIdAndReviewStatus(String userId, String reviewStatus);
+
+    boolean existsByIpAddressAndReviewStatusAndUserIdNot(
+            String ipAddress, String reviewStatus, String userId);
 }
