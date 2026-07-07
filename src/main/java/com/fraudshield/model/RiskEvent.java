@@ -21,7 +21,13 @@ public class RiskEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // 唯一约束是幂等性的最终防线：check-then-insert在并发重复投递下有竞态，
+    // 由DB层保证同一orderId不会写入两行
+    // Unique constraint is the idempotency backstop: check-then-insert races under
+    // concurrent redelivery, so the DB enforces one row per orderId.
+    @Column(unique = true)
     private String orderId;
+
     private String userId;
     private String ipAddress;
     private Double amount;

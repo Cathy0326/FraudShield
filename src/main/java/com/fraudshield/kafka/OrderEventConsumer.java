@@ -11,6 +11,7 @@ import com.fraudshield.service.AzureOpenAIService;
 import com.fraudshield.service.RiskEventService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -63,9 +64,10 @@ public class OrderEventConsumer {
         if (result.getRiskLevel() == RiskLevel.HIGH || result.getRiskLevel() == RiskLevel.MEDIUM) {
             saveIfAbsent(order, result);
         } else {
-            // NORMAL/LOW → 只记日志，但增加Redis普通订单计数器
-            // NORMAL/LOW → log only, but track in Redis so dashboard can show total volume
-            riskEventService.incrementNormalCounter();
+            // NORMAL/LOW → 只记日志，但增加Redis普通订单计数器（按orderId去重，防止重复投递重复计数）
+            // NORMAL/LOW → log only, but track in Redis so dashboard can show total volume.
+            // Deduplicated by orderId so at-least-once redelivery doesn't double-count.
+            riskEventService.incrementNormalCounterIdempotent(order.getOrderId());
         }
     }
 
@@ -100,7 +102,18 @@ public class OrderEventConsumer {
                     order.getOrderId(), ai.getAiRiskLevel(), ai.getConfidence(), ai.isAiEnhanced());
         }
 
-        repository.save(builder.build());
+        try {
+            repository.save(builder.build());
+        } catch (DataIntegrityViolationException e) {
+            // check-then-insert竞态的兜底：并发重复投递同时通过了findByOrderId检查，
+            // DB唯一约束拦下第二次插入 —— 这是预期的幂等行为，不是错误
+            // Backstop for the check-then-insert race: a concurrent redelivery passed the
+            // findByOrderId check too; the DB unique constraint rejects the second insert.
+            // Expected idempotent behavior, not an error.
+            log.warn("Concurrent duplicate insert blocked by unique constraint for orderId={}",
+                    order.getOrderId());
+            return;
+        }
         log.info("Saved RiskEvent for {}/score={} order: {}",
                 result.getRiskLevel(), result.getRiskScore(), order.getOrderId());
     }

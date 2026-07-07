@@ -160,4 +160,30 @@ class OrderEventConsumerTest {
 
         verify(aiService, never()).analyze(any(), any());
     }
+
+    // ── Test 9: check-then-insert竞态 → DB唯一约束兜底，消费者不抛异常 ─────────
+    // Concurrent redelivery passes findByOrderId, unique constraint rejects the insert;
+    // the consumer must treat it as expected idempotent behavior, not crash the listener
+    @Test
+    void concurrentDuplicateInsert_uniqueConstraintViolation_isSwallowed() {
+        Order order = order("ORD-RACE");
+        when(engine.evaluate(order)).thenReturn(result("ORD-RACE", RiskLevel.HIGH, 1.0));
+        when(repository.findByOrderId("ORD-RACE")).thenReturn(Optional.empty());
+        when(repository.save(any())).thenThrow(
+                new org.springframework.dao.DataIntegrityViolationException("duplicate orderId"));
+
+        consumer.consume(order); // must not throw
+    }
+
+    // ── Test 10: NORMAL订单 → 走幂等计数器，传入orderId ────────────────────────
+    // NORMAL orders go through the idempotent counter keyed by orderId
+    @Test
+    void normalRiskOrder_usesIdempotentCounter() {
+        Order order = order("ORD-NORM-IDEM");
+        when(engine.evaluate(order)).thenReturn(result("ORD-NORM-IDEM", RiskLevel.NORMAL, 0.0));
+
+        consumer.consume(order);
+
+        verify(riskEventService).incrementNormalCounterIdempotent("ORD-NORM-IDEM");
+    }
 }

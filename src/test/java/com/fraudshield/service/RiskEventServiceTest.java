@@ -188,5 +188,29 @@ class RiskEventServiceTest {
 
         assertThat(queue).hasSize(2);
         assertThat(queue.get(0).getReviewStatus()).isEqualTo("PENDING_REVIEW");
+    // ── 幂等计数器：首次处理 → SETNX成功 → 计数+1 ─────────────────────────────
+    // Idempotent counter: first delivery sets the marker and increments
+    @Test
+    void incrementNormalCounterIdempotent_firstDelivery_increments() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.setIfAbsent(eq("processed:normal:ORD-1"), eq("1"), any(java.time.Duration.class)))
+                .thenReturn(true);
+
+        service.incrementNormalCounterIdempotent("ORD-1");
+
+        verify(valueOps).increment("counter:normal_orders");
+    }
+
+    // ── 幂等计数器：重复投递 → SETNX失败 → 不重复计数 ──────────────────────────
+    // Idempotent counter: redelivery finds the marker already set and does NOT increment
+    @Test
+    void incrementNormalCounterIdempotent_redelivery_doesNotDoubleCount() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.setIfAbsent(eq("processed:normal:ORD-1"), eq("1"), any(java.time.Duration.class)))
+                .thenReturn(false);
+
+        service.incrementNormalCounterIdempotent("ORD-1");
+
+        verify(valueOps, never()).increment(anyString());
     }
 }
