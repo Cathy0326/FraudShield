@@ -1,6 +1,7 @@
 package com.fraudshield.config;
 
 import com.fraudshield.model.Order;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -22,9 +23,11 @@ import java.util.Map;
 public class KafkaConfig {
 
     private final KafkaProperties kafkaProperties;
+    private final MeterRegistry meterRegistry;
 
-    public KafkaConfig(KafkaProperties kafkaProperties) {
+    public KafkaConfig(KafkaProperties kafkaProperties, MeterRegistry meterRegistry) {
         this.kafkaProperties = kafkaProperties;
+        this.meterRegistry = meterRegistry;
     }
 
     // ── Consumer Factory ────────────────────────────────────────────────────
@@ -48,7 +51,15 @@ public class KafkaConfig {
         props.put(JsonDeserializer.VALUE_DEFAULT_TYPE, Order.class.getName());
         props.put(JsonDeserializer.TRUSTED_PACKAGES, "com.fraudshield.*");
 
-        return new DefaultKafkaConsumerFactory<>(props);
+        DefaultKafkaConsumerFactory<String, Order> factory = new DefaultKafkaConsumerFactory<>(props);
+        // 自定义factory会绕过Spring Boot自动配置的metrics绑定 —— 不手动挂
+        // MicrometerConsumerListener，kafka_consumer_*指标（包括consumer lag）
+        // 就永远不会出现在/actuator/prometheus里
+        // A custom factory bypasses Spring Boot's auto-configured metrics binding;
+        // without this listener the kafka_consumer_* metrics (incl. consumer lag)
+        // never appear in /actuator/prometheus.
+        factory.addListener(new MicrometerConsumerListener<>(meterRegistry));
+        return factory;
     }
 
     @Bean
@@ -68,7 +79,9 @@ public class KafkaConfig {
         Map<String, Object> props = new HashMap<>(kafkaProperties.buildProducerProperties());
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        return new DefaultKafkaProducerFactory<>(props);
+        DefaultKafkaProducerFactory<String, Order> factory = new DefaultKafkaProducerFactory<>(props);
+        factory.addListener(new MicrometerProducerListener<>(meterRegistry));
+        return factory;
     }
 
     @Bean
