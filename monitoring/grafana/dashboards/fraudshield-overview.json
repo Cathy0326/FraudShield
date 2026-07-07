@@ -63,7 +63,7 @@
       "description": "Label production rate. A growing FALSE_POSITIVE share means detection rules need tuning — see the Rule Precision report.",
       "targets": [
         {
-          "expr": "fraudshield_review_decisions_total",
+          "expr": "fraudshield_review_decisions",
           "legendFormat": "{{outcome}}"
         }
       ]
@@ -76,11 +76,11 @@
       "description": "How often the LLM analysis actually ran vs fell back (bad credentials, timeouts, parse failures). A rising fallback line is an integration problem invisible in the app UI.",
       "targets": [
         {
-          "expr": "fraudshield_ai_enhanced_total",
+          "expr": "fraudshield_ai_enhanced",
           "legendFormat": "AI enhanced"
         },
         {
-          "expr": "fraudshield_ai_fallback_total",
+          "expr": "fraudshield_ai_fallback",
           "legendFormat": "fallback"
         }
       ]
