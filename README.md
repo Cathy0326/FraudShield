@@ -15,7 +15,8 @@ Orders ──▶ Kafka ──▶ Rule Engine ──▶ AI second opinion ──�
 
 The feedback loop is the point: a reviewer clicking **Confirm Fraud** simultaneously
 (1) updates per-rule precision stats, (2) arms `ConfirmedFraudHistoryRule` against that
-user and their IPs, and (3) seeds graph risk propagation across the whole fraud ring.
+user and their IPs, (3) seeds graph risk propagation across the whole fraud ring, and
+(4) tunes the weight each rule carries in the scoring engine.
 
 ## Detection: three signal dimensions
 
@@ -30,6 +31,12 @@ nothing directly with confirmed fraudster A, yet propagation gives C a non-zero,
 distance-decayed "Network Risk" score. Fraud rings rotate accounts but reuse
 infrastructure — labels earned on old accounts catch the new ones.
 
+**Combining signals**: rule outputs are merged with precision-weighted noisy-OR —
+`combined = 1 − Π(1 − wᵢ·sᵢ)` — so corroborating evidence compounds (two independent
+0.6 signals score 0.84, not 0.6), and each rule's weight comes from its *measured*
+precision against review labels: rules that generate false alarms speak more quietly,
+automatically.
+
 ## Human review workflow
 
 Detection is only half a fraud system; the business process is
@@ -43,6 +50,11 @@ Detection is only half a fraud system; the business process is
 - **Rule Precision** report: which rules fire correctly and which generate the most
   false alarms — measured from labels, not guessed. Unmeasured rules show
   "no labels yet", never a misleading 0%.
+- **Tamper-evident audit chain**: every decision is a link in an HMAC-SHA256 hash
+  chain (each record's hash covers the previous one). A DBA editing or deleting a
+  historical decision breaks every subsequent link; `GET /api/audit/verify` recomputes
+  the whole chain and pinpoints the first broken record. HMAC — not plain SHA-256 —
+  because a keyless hash chain can simply be recomputed after tampering.
 
 ## AI second opinion — with an eval harness
 
