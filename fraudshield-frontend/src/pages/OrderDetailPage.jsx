@@ -310,12 +310,14 @@ export default function OrderDetailPage() {
                 <p className="text-sm text-slate-500">No profile data available for this user.</p>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                     {[
                       ['Total Orders', profile.totalOrders],
                       ['High Risk',    profile.highRiskCount],
                       ['Medium Risk',  profile.mediumRiskCount],
                       ['Total Amount', `$${profile.totalAmount?.toFixed(2)}`],
+                      // 图传播分数：离已确认欺诈有多近（多跳）/ how close to confirmed fraud (multi-hop)
+                      ['Network Risk', profile.graphRiskScore > 0 ? profile.graphRiskScore.toFixed(2) : '—'],
                     ].map(([label, val]) => (
                       <div key={label}>
                         <dt className="text-xs text-slate-500 uppercase tracking-wide">{label}</dt>
