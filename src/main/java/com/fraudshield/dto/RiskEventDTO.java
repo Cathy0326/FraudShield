@@ -23,6 +23,12 @@ public class RiskEventDTO {
     private String explanation;
     private LocalDateTime detectedAt;
 
+    // 审核工作流字段 / review-workflow fields
+    private String reviewStatus;
+    private String reviewedBy;
+    private LocalDateTime reviewedAt;
+    private String reviewNotes;
+
     // AI增强字段 / AI-enriched fields (only present for MEDIUM-risk orders)
     private String aiRiskLevel;
     private Double aiConfidence;
@@ -55,6 +61,12 @@ public class RiskEventDTO {
                 .triggeredRules(rules)
                 .explanation(e.getExplanation())
                 .detectedAt(e.getDetectedAt())
+                // NULL状态的遗留行视同待审，与findPendingReview口径一致
+                // Legacy NULL status reads as pending — same convention as findPendingReview
+                .reviewStatus(e.getReviewStatus() == null ? "PENDING_REVIEW" : e.getReviewStatus())
+                .reviewedBy(e.getReviewedBy())
+                .reviewedAt(e.getReviewedAt())
+                .reviewNotes(e.getReviewNotes())
                 .aiRiskLevel(e.getAiRiskLevel())
                 .aiConfidence(e.getAiConfidence())
                 .aiReasoning(e.getAiReasoning())

@@ -10,6 +10,7 @@ import com.fraudshield.service.AzureOpenAIService;
 import com.fraudshield.service.RiskEventService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -72,6 +73,28 @@ public class RiskEventController {
                 .explanation(event.getExplanation())
                 .build();
         return ResponseEntity.ok(aiService.analyze(order, riskResult));
+    }
+
+    // GET /api/risk-events/review-queue — flagged events awaiting a human decision
+    @GetMapping("/review-queue")
+    public ResponseEntity<List<RiskEventDTO>> getReviewQueue() {
+        return ResponseEntity.ok(riskEventService.getReviewQueue());
+    }
+
+    // POST /api/risk-events/{orderId}/review — submit a review decision
+    // 审核人取自认证主体而非请求体，防止伪造他人名义提交审核
+    // Reviewer identity comes from the authenticated principal, never the request body —
+    // otherwise anyone could submit decisions under a colleague's name.
+    @PostMapping("/{orderId}/review")
+    public ResponseEntity<RiskEventDTO> reviewEvent(
+            @PathVariable String orderId,
+            @RequestBody Map<String, String> body,
+            Authentication authentication) {
+        return ResponseEntity.ok(riskEventService.reviewEvent(
+                orderId,
+                body.get("decision"),
+                authentication.getName(),
+                body.get("notes")));
     }
 
     // GET /api/risk-events/user/{userId}/profile — order history + linked accounts for this user

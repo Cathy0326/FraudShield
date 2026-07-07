@@ -137,6 +137,51 @@ public class RiskEventService {
                 .build();
     }
 
+    // 允许的审核决定 / valid terminal review decisions
+    private static final Set<String> VALID_DECISIONS =
+            Set.of("CONFIRMED_FRAUD", "FALSE_POSITIVE", "APPROVED");
+
+    /**
+     * 待审队列 — 检测只是流程的开头，ops人员从这里领取待处理订单
+     * Review queue: every flagged event awaiting a human decision, oldest risk first.
+     */
+    public List<RiskEventDTO> getReviewQueue() {
+        return repository.findPendingReview()
+                .stream()
+                .map(RiskEventDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 提交审核决定 — PENDING_REVIEW → CONFIRMED_FRAUD / FALSE_POSITIVE / APPROVED（终态）
+     * Submit a review decision. Terminal states are immutable: re-reviewing a decided
+     * event would corrupt the label data that rule-precision stats are built on.
+     *
+     * @param reviewer taken from the authenticated principal, never from the request body
+     */
+    public RiskEventDTO reviewEvent(String orderId, String decision, String reviewer, String notes) {
+        if (!VALID_DECISIONS.contains(decision)) {
+            throw new IllegalArgumentException(
+                    "Invalid review decision: " + decision + ". Must be one of " + VALID_DECISIONS);
+        }
+
+        RiskEvent event = repository.findByOrderId(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Risk event not found for orderId: " + orderId));
+
+        String current = event.getReviewStatus();
+        if (current != null && !"PENDING_REVIEW".equals(current)) {
+            throw new IllegalStateException(
+                    "Order " + orderId + " already reviewed as " + current + " by " + event.getReviewedBy());
+        }
+
+        event.setReviewStatus(decision);
+        event.setReviewedBy(reviewer);
+        event.setReviewedAt(LocalDateTime.now());
+        event.setReviewNotes(notes);
+        return RiskEventDTO.fromEntity(repository.save(event));
+    }
+
     public void deleteEvent(Long id) {
         if (!repository.existsById(id)) {
             throw new ResourceNotFoundException("Risk event not found with id: " + id);

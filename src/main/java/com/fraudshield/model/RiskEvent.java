@@ -42,6 +42,21 @@ public class RiskEvent {
     @CreationTimestamp
     private LocalDateTime detectedAt;
 
+    // ── 人工审核工作流字段 ──────────────────────────────────────────────────
+    // Review workflow: detection flags an order, but the business process is
+    // detect → review → decide. A reviewer resolves each flagged event to
+    // CONFIRMED_FRAUD / FALSE_POSITIVE / APPROVED; labels feed rule-precision stats.
+    //
+    // PENDING_REVIEW → CONFIRMED_FRAUD | FALSE_POSITIVE | APPROVED (terminal)
+    // 存储枚举名字符串，与riskLevel同理 / stored as String, same rationale as riskLevel.
+    @Builder.Default
+    private String reviewStatus = "PENDING_REVIEW";
+
+    private String reviewedBy;
+    private LocalDateTime reviewedAt;
+    @Column(length = 1024)
+    private String reviewNotes;
+
     // ── AI增强字段（仅MEDIUM风险订单填充）──────────────────────────────────────
     // AI-enriched fields — populated only for MEDIUM-risk orders via Azure OpenAI
 

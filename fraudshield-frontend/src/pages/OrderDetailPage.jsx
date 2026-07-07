@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getEventByOrderId, getAiAnalysis, getUserRiskProfile } from '../services/api';
+import { getEventByOrderId, getAiAnalysis, getUserRiskProfile, submitReview } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -15,6 +15,9 @@ export default function OrderDetailPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [profile,        setProfile]        = useState(null); // user history + linked accounts
   const [profileLoading, setProfileLoading] = useState(true);
+  const [reviewNotes,  setReviewNotes]  = useState('');
+  const [reviewing,    setReviewing]    = useState(false);
+  const [reviewError,  setReviewError]  = useState('');
 
   useEffect(() => {
     getEventByOrderId(orderId)
@@ -44,6 +47,15 @@ export default function OrderDetailPage() {
         setProfileLoading(false);
       });
   }, [orderId]);
+
+  function handleReview(decision) {
+    setReviewing(true);
+    setReviewError('');
+    submitReview(orderId, decision, reviewNotes || null)
+      .then(setEvent) // 后端返回更新后的事件 / backend returns the updated event
+      .catch(err => setReviewError(err.response?.data?.message || 'Failed to submit review.'))
+      .finally(() => setReviewing(false));
+  }
 
   function runAiAnalysis() {
     setAiLoading(true);
@@ -134,6 +146,72 @@ export default function OrderDetailPage() {
                   <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Explanation</p>
                   <p className="text-sm text-slate-300">{event.explanation}</p>
                 </div>
+              )}
+            </div>
+
+            {/* Review Decision Card — the human decision that closes the loop */}
+            <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-4">
+              <h2 className="text-lg font-semibold text-white">Review Decision</h2>
+
+              {event.reviewStatus && event.reviewStatus !== 'PENDING_REVIEW' ? (
+                <div className="space-y-2">
+                  <span className={`inline-block text-xs font-semibold px-3 py-1 rounded-full ${
+                    event.reviewStatus === 'CONFIRMED_FRAUD'
+                      ? 'bg-red-900/40 text-red-300 border border-red-500/30'
+                      : event.reviewStatus === 'FALSE_POSITIVE'
+                        ? 'bg-slate-700/40 text-slate-300 border border-slate-500/30'
+                        : 'bg-green-900/40 text-green-300 border border-green-500/30'
+                  }`}>
+                    {event.reviewStatus.replace('_', ' ')}
+                  </span>
+                  <p className="text-sm text-slate-400">
+                    Reviewed by <span className="text-slate-200">{event.reviewedBy}</span>
+                    {event.reviewedAt && <> on {new Date(event.reviewedAt).toLocaleString()}</>}
+                  </p>
+                  {event.reviewNotes && (
+                    <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
+                      <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Notes</p>
+                      <p className="text-sm text-slate-300">{event.reviewNotes}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-500">
+                    This order is awaiting a decision. Your username and timestamp will be recorded.
+                  </p>
+                  <textarea
+                    value={reviewNotes}
+                    onChange={e => setReviewNotes(e.target.value)}
+                    placeholder="Optional notes (e.g. verified with customer, chargeback reported…)"
+                    rows={2}
+                    className="w-full text-sm bg-dark-bg border border-dark-border rounded-lg p-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  />
+                  {reviewError && <p className="text-sm text-red-400">{reviewError}</p>}
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => handleReview('CONFIRMED_FRAUD')}
+                      disabled={reviewing}
+                      className="text-sm px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                    >
+                      Confirm Fraud
+                    </button>
+                    <button
+                      onClick={() => handleReview('FALSE_POSITIVE')}
+                      disabled={reviewing}
+                      className="text-sm px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                    >
+                      False Positive
+                    </button>
+                    <button
+                      onClick={() => handleReview('APPROVED')}
+                      disabled={reviewing}
+                      className="text-sm px-4 py-2 bg-green-700 hover:bg-green-800 disabled:opacity-50 text-white rounded-lg transition-colors"
+                    >
+                      Approve Order
+                    </button>
+                  </div>
+                </>
               )}
             </div>
 

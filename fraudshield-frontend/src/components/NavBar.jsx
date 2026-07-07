@@ -14,6 +14,7 @@ export default function NavBar() {
       <div className="flex items-center gap-6">
         <span className="text-indigo-400 font-bold text-lg tracking-tight">⚡ FraudShield</span>
         <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
+        <NavLink to="/review"    className={linkClass}>Review Queue</NavLink>
         <NavLink to="/reports"   className={linkClass}>Reports</NavLink>
       </div>
       <div className="flex items-center gap-4">

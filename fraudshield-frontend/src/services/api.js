@@ -61,4 +61,10 @@ export const getAiAnalysis = (orderId) =>
 export const getUserRiskProfile = (userId) =>
   api.get(`/api/risk-events/user/${userId}/profile`).then((r) => r.data);
 
+export const getReviewQueue = () =>
+  api.get('/api/risk-events/review-queue').then((r) => r.data);
+
+export const submitReview = (orderId, decision, notes) =>
+  api.post(`/api/risk-events/${orderId}/review`, { decision, notes }).then((r) => r.data);
+
 export default api;
