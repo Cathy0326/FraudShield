@@ -124,3 +124,11 @@ management:
   metrics:
     tags:
       application: fraudshield
+    distribution:
+      # p95面板依赖_bucket直方图序列，但Micrometer默认不发布直方图 ——
+      # 没有这两行，histogram_quantile()永远No data
+      # The p95 panels query _bucket series, which Micrometer does NOT publish by
+      # default — without these, histogram_quantile() always returns No data.
+      percentiles-histogram:
+        http.server.requests: true
+        fraudshield.risk.evaluation.duration: true
