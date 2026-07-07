@@ -188,6 +188,8 @@ class RiskEventServiceTest {
 
         assertThat(queue).hasSize(2);
         assertThat(queue.get(0).getReviewStatus()).isEqualTo("PENDING_REVIEW");
+    }
+
     // ── 幂等计数器：首次处理 → SETNX成功 → 计数+1 ─────────────────────────────
     // Idempotent counter: first delivery sets the marker and increments
     @Test
@@ -212,5 +214,62 @@ class RiskEventServiceTest {
         service.incrementNormalCounterIdempotent("ORD-1");
 
         verify(valueOps, never()).increment(anyString());
+    }
+
+    // ── 规则精度统计 / Rule precision from review labels ──────────────────────
+
+    @Test
+    void getRulePrecision_computesPerRuleCountsAndPrecision() {
+        event1.setTriggeredRules("BlacklistRule");
+        event1.setReviewStatus("CONFIRMED_FRAUD");
+        event2.setTriggeredRules("BlacklistRule,HighAmountNewUserRule");
+        event2.setReviewStatus("FALSE_POSITIVE");
+        event3.setTriggeredRules("BlacklistRule");
+        event3.setReviewStatus(null); // 未审核 / not yet reviewed
+        when(repository.findAll()).thenReturn(List.of(event1, event2, event3));
+
+        var stats = service.getRulePrecision();
+
+        var blacklist = stats.stream().filter(s -> s.getRule().equals("BlacklistRule")).findFirst().orElseThrow();
+        assertThat(blacklist.getTotalHits()).isEqualTo(3);
+        assertThat(blacklist.getReviewedHits()).isEqualTo(2);
+        assertThat(blacklist.getConfirmedFraud()).isEqualTo(1);
+        assertThat(blacklist.getFalsePositive()).isEqualTo(1);
+        assertThat(blacklist.getPrecision()).isEqualTo(50.0); // 1 of 2 reviewed hits was real
+
+        var highAmount = stats.stream().filter(s -> s.getRule().equals("HighAmountNewUserRule")).findFirst().orElseThrow();
+        assertThat(highAmount.getTotalHits()).isEqualTo(1);
+        assertThat(highAmount.getPrecision()).isEqualTo(0.0); // its only reviewed hit was a false positive
+    }
+
+    @Test
+    void getRulePrecision_noReviewedHits_precisionIsNull() {
+        // 无标注时精度未知（null），绝不能显示成0%——那会误导ops认为规则全错
+        // With no labels precision is unknown (null), never 0% — that would falsely
+        // tell ops the rule is always wrong
+        event1.setTriggeredRules("FrequentIpRule");
+        event1.setReviewStatus("PENDING_REVIEW");
+        when(repository.findAll()).thenReturn(List.of(event1));
+
+        var stats = service.getRulePrecision();
+
+        assertThat(stats).hasSize(1);
+        assertThat(stats.get(0).getPrecision()).isNull();
+        assertThat(stats.get(0).getTotalHits()).isEqualTo(1);
+        assertThat(stats.get(0).getReviewedHits()).isEqualTo(0);
+    }
+
+    @Test
+    void getRulePrecision_approvedCountsAgainstTheRule() {
+        // APPROVED订单被放行 → 对规则而言同样是误报
+        // An APPROVED order was allowed — from the rule's view that's also a false alarm
+        event1.setTriggeredRules("AbnormalAmountRule");
+        event1.setReviewStatus("APPROVED");
+        when(repository.findAll()).thenReturn(List.of(event1));
+
+        var stats = service.getRulePrecision();
+
+        assertThat(stats.get(0).getApproved()).isEqualTo(1);
+        assertThat(stats.get(0).getPrecision()).isEqualTo(0.0);
     }
 }

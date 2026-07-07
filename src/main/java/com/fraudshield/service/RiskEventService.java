@@ -3,6 +3,7 @@ package com.fraudshield.service;
 import com.fraudshield.dto.DashboardStatsDTO;
 import com.fraudshield.dto.HourlyStatDTO;
 import com.fraudshield.dto.RiskEventDTO;
+import com.fraudshield.dto.RulePrecisionDTO;
 import com.fraudshield.dto.UserRiskProfileDTO;
 import com.fraudshield.exception.ResourceNotFoundException;
 import com.fraudshield.model.RiskEvent;
@@ -200,6 +201,69 @@ public class RiskEventService {
         event.setReviewedAt(LocalDateTime.now());
         event.setReviewNotes(notes);
         return RiskEventDTO.fromEntity(repository.save(event));
+    }
+
+    /**
+     * 规则精度统计 — 审核标注的第一个用途：哪条规则误报最多？
+     * Rule precision from review labels — the first payoff of the review workflow:
+     * which rule generates the most false alarms?
+     *
+     * <p>精度口径：confirmedFraud / 已审核命中数。APPROVED和FALSE_POSITIVE都算误报，
+     * 因为订单最终被放行 —— 规则拦错了。
+     * Precision = confirmedFraud / reviewedHits. Both APPROVED and FALSE_POSITIVE count
+     * against the rule: the order was ultimately allowed, so the rule flagged wrongly.
+     *
+     * <p>与buildRuleHitCounts一样是全表遍历 —— demo规模的取舍；规模化时应在审核
+     * 提交时增量更新计数（与规则命中计数同一演进路径）。
+     * Full-table scan like buildRuleHitCounts — a demo-scale trade-off. At scale these
+     * counters would be incremented at review-submission time instead.
+     */
+    public List<RulePrecisionDTO> getRulePrecision() {
+        Map<String, long[]> byRule = new HashMap<>(); // [totalHits, confirmed, falsePos, approved]
+
+        for (RiskEvent e : repository.findAll()) {
+            if (e.getTriggeredRules() == null || e.getTriggeredRules().isBlank()) {
+                continue;
+            }
+            String status = e.getReviewStatus();
+            for (String raw : e.getTriggeredRules().split(",")) {
+                String rule = raw.trim();
+                if (rule.isEmpty()) {
+                    continue;
+                }
+                long[] counts = byRule.computeIfAbsent(rule, r -> new long[4]);
+                counts[0]++;
+                if ("CONFIRMED_FRAUD".equals(status)) {
+                    counts[1]++;
+                } else if ("FALSE_POSITIVE".equals(status)) {
+                    counts[2]++;
+                } else if ("APPROVED".equals(status)) {
+                    counts[3]++;
+                }
+            }
+        }
+
+        return byRule.entrySet().stream()
+                .map(entry -> {
+                    long[] c = entry.getValue();
+                    long reviewed = c[1] + c[2] + c[3];
+                    Double precision = reviewed == 0 ? null
+                            : Math.round(c[1] * 10000.0 / reviewed) / 100.0;
+                    return RulePrecisionDTO.builder()
+                            .rule(entry.getKey())
+                            .totalHits(c[0])
+                            .reviewedHits(reviewed)
+                            .confirmedFraud(c[1])
+                            .falsePositive(c[2])
+                            .approved(c[3])
+                            .precision(precision)
+                            .build();
+                })
+                // 误报最多的排前面 —— 这是ops最需要看到的 / worst offenders first
+                .sorted(Comparator.comparingLong(
+                        (RulePrecisionDTO d) -> d.getFalsePositive() + d.getApproved()).reversed()
+                        .thenComparing(RulePrecisionDTO::getRule))
+                .collect(Collectors.toList());
     }
 
     public void deleteEvent(Long id) {

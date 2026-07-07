@@ -2,6 +2,7 @@ package com.fraudshield.controller;
 
 import com.fraudshield.dto.DashboardStatsDTO;
 import com.fraudshield.dto.RiskEventDTO;
+import com.fraudshield.dto.RulePrecisionDTO;
 import com.fraudshield.dto.UserRiskProfileDTO;
 import com.fraudshield.model.AiAnalysis;
 import com.fraudshield.model.Order;
@@ -73,6 +74,12 @@ public class RiskEventController {
                 .explanation(event.getExplanation())
                 .build();
         return ResponseEntity.ok(aiService.analyze(order, riskResult));
+    }
+
+    // GET /api/risk-events/rule-precision — per-rule accuracy computed from review labels
+    @GetMapping("/rule-precision")
+    public ResponseEntity<List<RulePrecisionDTO>> getRulePrecision() {
+        return ResponseEntity.ok(riskEventService.getRulePrecision());
     }
 
     // GET /api/risk-events/review-queue — flagged events awaiting a human decision
