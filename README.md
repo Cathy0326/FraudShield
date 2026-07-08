@@ -24,12 +24,14 @@ user and their IPs, (3) seeds graph risk propagation across the whole fraud ring
 |---|---|---|
 | **Volume** | Clumsy fraud — too much, too fast | `FrequentIpRule` (velocity), `AbnormalAmountRule` (EMA deviation), `HighAmountNewUserRule` |
 | **Identity** | Repeat offenders | `BlacklistRule` (curated Redis sets), `ConfirmedFraudHistoryRule` (auto-generated from review labels — no manual sync) |
-| **Relationship** | Organized fraud rings | Shared-IP linked accounts (2-hop), graph risk propagation (multi-hop, power-iteration on the user–IP graph with Euclidean-norm convergence) |
+| **Relationship** | Organized fraud rings | Shared-IP/shared-device linked accounts (2-hop), graph risk propagation (multi-hop, power-iteration on the user–IP–device graph with Euclidean-norm convergence) |
 
 The multi-hop case is the interesting one: in a chain `A—IP1—B—IP2—C`, user C shares
 nothing directly with confirmed fraudster A, yet propagation gives C a non-zero,
 distance-decayed "Network Risk" score. Fraud rings rotate accounts but reuse
-infrastructure — labels earned on old accounts catch the new ones.
+infrastructure — labels earned on old accounts catch the new ones. Linkage runs
+over both IPs and device fingerprints: shared NAT makes IP matches noisy, while
+the same device across "different" accounts rarely lies.
 
 **Combining signals**: rule outputs are merged with precision-weighted noisy-OR —
 `combined = 1 − Π(1 − wᵢ·sᵢ)` — so corroborating evidence compounds (two independent
@@ -78,7 +80,7 @@ java -cp "target/test-classes:target/classes:$(cat target/cp.txt)" \
 
 ## Security
 
-- **PII encrypted at rest**: `userId` and `ipAddress` are stored with deterministic
+- **PII encrypted at rest**: `userId`, `ipAddress`, and `deviceId` are stored with deterministic
   AES-256-GCM (synthetic IV from HMAC) via a JPA converter — equality queries keep
   working, services stay unchanged, and a DB copy or backup no longer exposes personal
   data. Key via `FRAUDSHIELD_ENCRYPTION_KEY` (`openssl rand -base64 32`).
@@ -119,9 +121,12 @@ docker compose up -d          # zookeeper, kafka, redis, backend, frontend, prom
 open http://localhost:3000    # login: admin / Admin@123
 ```
 
-Click **Send Test Orders** on the dashboard, then explore: Review Queue → decide an
+A built-in simulator emits one synthetic order every 4 seconds (~70% normal, the
+rest tripping each detection rule), so every dashboard moves on its own — set
+`SIMULATOR_ENABLED=false` to silence it. Then explore: Review Queue → decide an
 order → Reports (rule precision reflects your decision) → any order detail (user risk
-profile, linked accounts, network risk score).
+profile, linked accounts, network risk score). **Send Test Orders** still works for
+an on-demand burst.
 
 ```bash
 mvn test                      # full unit suite
