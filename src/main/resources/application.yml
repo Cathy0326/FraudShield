@@ -86,6 +86,12 @@ fraudshield:
   kafka:
     topic:
       order-events: order-events   # topic name used by producers/consumers
+  simulator:
+    # 持续合成流量：每4秒一单（70%正常/30%命中规则）。默认关；本地demo用
+    # SIMULATOR_ENABLED=true开启。真实部署绝不能开。
+    # Continuous synthetic traffic (one order/4s, 70% normal). Off by default;
+    # enable with SIMULATOR_ENABLED=true for local demos. Never in production.
+    enabled: ${SIMULATOR_ENABLED:false}
   encryption:
     # PII落库加密密钥：32字节的Base64（生成：openssl rand -base64 32）
     # 未设置时PII明文存储并打启动警告 —— 仅限本地开发
