@@ -101,6 +101,9 @@ services:
       # deployments must override with their own key (openssl rand -base64 32)
       # injected from a secret store, never a compose file.
       FRAUDSHIELD_ENCRYPTION_KEY: ${FRAUDSHIELD_ENCRYPTION_KEY:-HSQyfTqIYzNQXyr9E9FWp7T9PjS5dmW7f3mtYsy77qI=}
+      # 本地demo默认开启持续订单模拟器；不想要合成流量时改为false
+      # Continuous order simulator on by default for local demos; set false to disable
+      SIMULATOR_ENABLED: ${SIMULATOR_ENABLED:-true}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
