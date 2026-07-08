@@ -119,11 +119,30 @@ public class AzureOpenAIService {
                 riskResult.getTriggeredRules(), riskResult.getExplanation());
     }
 
+    /**
+     * Endpoint归一化 — 容错Azure Portal复制出来的各种格式
+     * Normalizes whatever endpoint format was pasted from the Azure Portal.
+     *
+     * <p>Portal的"Keys and Endpoint"页给的是裸域名（https://x.openai.azure.com/ 或
+     * https://x.services.ai.azure.com/），而统一v1推理API要求路径含/openai/v1。
+     * 用户直接粘贴Portal的值会打到错误URL，Azure返回401 "invalid subscription key
+     * or wrong API endpoint" —— 报错指向key，真凶是路径。这里自动补全，两种格式都能用。
+     * The Portal's "Keys and Endpoint" page gives a bare domain, but the unified v1
+     * inference API needs the /openai/v1 path. Pasting the Portal value verbatim hits
+     * the wrong URL and Azure answers 401 blaming the key — the real culprit is the
+     * path. Auto-appending makes both formats work.
+     */
+    static String normalizeEndpoint(String raw) {
+        String base = raw.trim().replaceAll("/+$", "");
+        if (!base.contains("/openai")) {
+            base = base + "/openai/v1";
+        }
+        return base;
+    }
+
     private String callAzureOpenAI(String prompt) throws Exception {
         // Unified Azure OpenAI v1 inference API — OpenAI-compatible chat completions.
-        // endpoint must already include the /openai/v1 path segment, e.g.
-        // https://<resource>.services.ai.azure.com/openai/v1
-        String url = endpoint.replaceAll("/$", "") + "/chat/completions";
+        String url = normalizeEndpoint(endpoint) + "/chat/completions";
 
         String requestBody = objectMapper.writeValueAsString(java.util.Map.of(
                 "model", deployment,
@@ -134,10 +153,13 @@ public class AzureOpenAIService {
                 "temperature", 0.3
         ));
 
+        // 同时带两种认证头：v1 API收Bearer，旧式deployments API收api-key —— 两者兼容
+        // Send both auth headers: the v1 API accepts Bearer, the legacy API api-key
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
                 .header("api-key", apiKey)
+                .header("Authorization", "Bearer " + apiKey)
                 .timeout(Duration.ofSeconds(30))
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
@@ -145,8 +167,11 @@ public class AzureOpenAIService {
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
+            // URL入报错信息（key绝不入）—— "wrong endpoint"类401靠它一眼定位
+            // Include the target URL (never the key) so endpoint-shaped 401s are
+            // diagnosable from the fallback reason alone.
             throw new RuntimeException("Azure OpenAI returned HTTP " + response.statusCode()
-                    + ": " + response.body());
+                    + " from " + url + ": " + response.body());
         }
 
         return response.body();
