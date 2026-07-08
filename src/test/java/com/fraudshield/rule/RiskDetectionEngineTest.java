@@ -3,6 +3,7 @@ package com.fraudshield.rule;
 import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskLevel;
 import com.fraudshield.model.RiskResult;
+import com.fraudshield.service.LogisticModelService;
 import com.fraudshield.service.RuleWeightService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,7 @@ import static org.mockito.Mockito.lenient;
 class RiskDetectionEngineTest {
 
     @Mock RuleWeightService weights;
+    @Mock LogisticModelService logisticModel;
 
     private final Order order = new Order("ORD-1", "USER-1", 100.0, "1.2.3.4", "DEV-1",
             LocalDateTime.now());
@@ -29,6 +31,9 @@ class RiskDetectionEngineTest {
     @BeforeEach
     void defaultWeights() {
         lenient().when(weights.weightFor(anyString())).thenReturn(1.0);
+        // 默认无训练模型 → 纯noisy-OR / untrained by default - pure noisy-OR
+        lenient().when(logisticModel.predict(org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(java.util.OptionalDouble.empty());
     }
 
     private RiskRule rule(String name, RiskLevel level, double score) {
@@ -42,7 +47,7 @@ class RiskDetectionEngineTest {
     }
 
     private RiskDetectionEngine engine(RiskRule... rules) {
-        return new RiskDetectionEngine(List.of(rules), new SimpleMeterRegistry(), weights);
+        return new RiskDetectionEngine(List.of(rules), new SimpleMeterRegistry(), weights, logisticModel);
     }
 
     @Test
@@ -99,6 +104,35 @@ class RiskDetectionEngineTest {
 
         assertThat(result.getRiskScore()).isLessThanOrEqualTo(1.0);
         assertThat(result.getRiskLevel()).isEqualTo(RiskLevel.HIGH);
+    }
+
+    @Test
+    void trainedModel_blendsFiftyFiftyWithNoisyOr() {
+        // noisy-OR 0.6 + 模型 1.0 → (0.6+1.0)/2 = 0.8 → HIGH
+        // A confident model escalates what the heuristic alone would call MEDIUM
+        lenient().when(logisticModel.predict(org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(java.util.OptionalDouble.of(1.0));
+        lenient().when(logisticModel.trainedOnSamples()).thenReturn(42);
+
+        RiskResult result = engine(rule("RuleA", RiskLevel.MEDIUM, 0.6)).evaluate(order);
+
+        assertThat(result.getRiskScore()).isEqualTo(0.8);
+        assertThat(result.getRiskLevel()).isEqualTo(RiskLevel.HIGH);
+        assertThat(result.getExplanation()).contains("ML fraud probability 1.00")
+                .contains("42 labeled orders");
+    }
+
+    @Test
+    void skepticalModel_dampensTheHeuristic() {
+        // 模型学到这个组合多为误报 → 分数被压低 / model learned this combo is noise
+        lenient().when(logisticModel.predict(org.mockito.ArgumentMatchers.anyList()))
+                .thenReturn(java.util.OptionalDouble.of(0.1));
+
+        RiskResult result = engine(rule("NoisyCombo", RiskLevel.MEDIUM, 0.7)).evaluate(order);
+
+        assertThat(result.getRiskScore()).isEqualTo(0.4);
+        assertThat(result.getRiskLevel()).isEqualTo(RiskLevel.LOW); // 0.7 alone would be MEDIUM
+
     }
 
     @Test
