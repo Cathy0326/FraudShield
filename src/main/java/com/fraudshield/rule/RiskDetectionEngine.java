@@ -3,6 +3,7 @@ package com.fraudshield.rule;
 import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskLevel;
 import com.fraudshield.model.RiskResult;
+import com.fraudshield.service.LogisticModelService;
 import com.fraudshield.service.RuleWeightService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -48,14 +49,16 @@ public class RiskDetectionEngine {
     private final List<RiskRule> rules;
     private final MeterRegistry meterRegistry;
     private final RuleWeightService ruleWeights;
+    private final LogisticModelService logisticModel;
 
     // Spring auto-injects every @Component that implements RiskRule.
     // Adding a new rule class is enough — no wiring change needed here.
     public RiskDetectionEngine(List<RiskRule> rules, MeterRegistry meterRegistry,
-                               RuleWeightService ruleWeights) {
+                               RuleWeightService ruleWeights, LogisticModelService logisticModel) {
         this.rules = rules;
         this.meterRegistry = meterRegistry;
         this.ruleWeights = ruleWeights;
+        this.logisticModel = logisticModel;
     }
 
     public RiskResult evaluate(Order order) {
@@ -101,6 +104,20 @@ public class RiskDetectionEngine {
             explanations.add(r.getExplanation());
         }
         double combined = Math.round((1.0 - survivorProbability) * 100.0) / 100.0;
+
+        // 逻辑回归就位时与noisy-OR各占一半：启发式兜底防少样本模型跑偏，
+        // 模型纠正启发式学不到的组合效应。模型未训练时保持纯noisy-OR行为。
+        // When the logistic model is trained, blend 50/50 with noisy-OR: the
+        // heuristic floors a model trained on few labels, the model corrects
+        // combination effects the heuristic can't express. Untrained = pure noisy-OR.
+        var learned = logisticModel.predict(allRules);
+        if (learned.isPresent()) {
+            double ml = learned.getAsDouble();
+            combined = Math.round((0.5 * combined + 0.5 * ml) * 100.0) / 100.0;
+            explanations.add(String.format(
+                    "ML fraud probability %.2f (trained on %d labeled orders)",
+                    ml, logisticModel.trainedOnSamples()));
+        }
 
         return RiskResult.builder()
                 .orderId(order.getOrderId())
