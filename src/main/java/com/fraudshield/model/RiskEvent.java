@@ -38,6 +38,11 @@ public class RiskEvent {
     @Convert(converter = com.fraudshield.crypto.EncryptedStringConverter.class)
     private String ipAddress;
 
+    // 设备指纹同属可识别个人的数据，与IP同等加密
+    // Device fingerprints identify people just like IPs do - same encryption
+    @Convert(converter = com.fraudshield.crypto.EncryptedStringConverter.class)
+    private String deviceId;
+
     private Double amount;
 
     // 存储枚举名称字符串，方便SQL查询和未来迁移

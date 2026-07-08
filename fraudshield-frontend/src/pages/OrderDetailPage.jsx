@@ -89,6 +89,7 @@ export default function OrderDetailPage() {
                   ['User ID',    event.userId],
                   ['Amount',     `$${event.amount?.toFixed(2)}`],
                   ['IP Address', event.ipAddress],
+                  ['Device', event.deviceId ?? '—'],
                   ['Detected',   event.detectedAt ? new Date(event.detectedAt).toLocaleString() : '—'],
                 ].map(([label, val]) => (
                   <div key={label}>

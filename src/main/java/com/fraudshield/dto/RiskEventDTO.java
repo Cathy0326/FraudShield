@@ -16,6 +16,7 @@ public class RiskEventDTO {
     private String orderId;
     private String userId;
     private String ipAddress;
+    private String deviceId;
     private Double amount;
     private String riskLevel;
     private Double riskScore;
@@ -55,6 +56,7 @@ public class RiskEventDTO {
                 .orderId(e.getOrderId())
                 .userId(e.getUserId())
                 .ipAddress(e.getIpAddress())
+                .deviceId(e.getDeviceId())
                 .amount(e.getAmount())
                 .riskLevel(e.getRiskLevel())
                 .riskScore(e.getRiskScore())

@@ -58,9 +58,10 @@ public class GraphRiskService {
     private static final double EPSILON = 1e-6;
     private static final int MAX_ITERATIONS = 50;
 
-    // 节点前缀防止用户名与IP字符串撞车 / prefixes keep user and IP node ids disjoint
+    // 节点前缀防止用户名/IP/设备字符串撞车 / prefixes keep node id spaces disjoint
     private static final String USER_PREFIX = "u:";
     private static final String IP_PREFIX = "ip:";
+    private static final String DEVICE_PREFIX = "d:";
 
     private final RiskEventRepository repository;
 
@@ -80,13 +81,22 @@ public class GraphRiskService {
         Map<String, Double> seed = new HashMap<>();
 
         for (RiskEvent e : events) {
-            if (e.getUserId() == null || e.getIpAddress() == null) {
+            if (e.getUserId() == null) {
                 continue;
             }
             String userNode = USER_PREFIX + e.getUserId();
-            String ipNode = IP_PREFIX + e.getIpAddress();
-            adjacency.computeIfAbsent(userNode, k -> new HashSet<>()).add(ipNode);
-            adjacency.computeIfAbsent(ipNode, k -> new HashSet<>()).add(userNode);
+            // 用户–IP、用户–设备双通道建边：团伙换账号时IP和设备至少复用其一
+            // Edges via both IP and device: rings rotating accounts reuse at least one
+            if (e.getIpAddress() != null) {
+                String ipNode = IP_PREFIX + e.getIpAddress();
+                adjacency.computeIfAbsent(userNode, k -> new HashSet<>()).add(ipNode);
+                adjacency.computeIfAbsent(ipNode, k -> new HashSet<>()).add(userNode);
+            }
+            if (e.getDeviceId() != null) {
+                String deviceNode = DEVICE_PREFIX + e.getDeviceId();
+                adjacency.computeIfAbsent(userNode, k -> new HashSet<>()).add(deviceNode);
+                adjacency.computeIfAbsent(deviceNode, k -> new HashSet<>()).add(userNode);
+            }
 
             if ("CONFIRMED_FRAUD".equals(e.getReviewStatus())) {
                 seed.put(userNode, 1.0);
