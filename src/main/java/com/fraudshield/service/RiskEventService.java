@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class RiskEventService {
@@ -141,9 +142,19 @@ public class RiskEventService {
                 .map(RiskEvent::getIpAddress)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+        Set<String> devices = history.stream()
+                .map(RiskEvent::getDeviceId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
 
-        List<String> linkedUserIds = ips.stream()
-                .flatMap(ip -> repository.findByIpAddressOrderByDetectedAtDesc(ip).stream())
+        // 共享IP或共享设备都算关联账号 —— 设备信号更强（共享NAT会让IP误伤，设备不会）
+        // Linked = shared IP OR shared device; the device signal is stronger
+        // (shared NAT causes IP false positives, devices don't).
+        List<String> linkedUserIds = Stream.concat(
+                        ips.stream().flatMap(ip ->
+                                repository.findByIpAddressOrderByDetectedAtDesc(ip).stream()),
+                        devices.stream().flatMap(dev ->
+                                repository.findByDeviceIdOrderByDetectedAtDesc(dev).stream()))
                 .map(RiskEvent::getUserId)
                 .filter(id -> id != null && !id.equals(userId))
                 .distinct()

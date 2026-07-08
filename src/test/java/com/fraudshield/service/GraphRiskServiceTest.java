@@ -38,6 +38,51 @@ class GraphRiskServiceTest {
                 .build();
     }
 
+    private RiskEvent deviceEvent(String userId, String deviceId, String reviewStatus) {
+        return RiskEvent.builder()
+                .orderId("ORD-" + userId + "-" + deviceId)
+                .userId(userId)
+                .deviceId(deviceId)
+                .riskLevel("HIGH")
+                .reviewStatus(reviewStatus)
+                .build();
+    }
+
+    @Test
+    void deviceSharing_propagatesRiskLikeIpSharing() {
+        // 团伙换IP但同一台设备下单 —— 设备边把标注传给新账号
+        // Ring rotates IPs but keeps the device; the device edge carries the label
+        when(repository.findAll()).thenReturn(List.of(
+                deviceEvent("FRAUDSTER", "DEV-X", "CONFIRMED_FRAUD"),
+                deviceEvent("NEW-ACCOUNT", "DEV-X", null)));
+
+        var scores = service.computeUserRiskScores().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        GraphRiskScoreDTO::getUserId, GraphRiskScoreDTO::getScore));
+
+        assertThat(scores.get("NEW-ACCOUNT")).isGreaterThan(0.0);
+    }
+
+    @Test
+    void mixedIpAndDeviceChain_connectsAcrossBothChannels() {
+        // 混合链：FRAUDSTER —IP— MULE —设备— RECRUIT，两种信号接力传播
+        // Mixed chain: label relays through an IP edge then a device edge
+        RiskEvent muleBoth = RiskEvent.builder()
+                .orderId("ORD-MULE-BOTH").userId("MULE")
+                .ipAddress("1.1.1.1").deviceId("DEV-M").riskLevel("HIGH").build();
+        when(repository.findAll()).thenReturn(List.of(
+                event("FRAUDSTER", "1.1.1.1", "CONFIRMED_FRAUD"),
+                muleBoth,
+                deviceEvent("RECRUIT", "DEV-M", null)));
+
+        var scores = service.computeUserRiskScores().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        GraphRiskScoreDTO::getUserId, GraphRiskScoreDTO::getScore));
+
+        assertThat(scores.get("RECRUIT")).isGreaterThan(0.0);
+        assertThat(scores.get("MULE")).isGreaterThan(scores.get("RECRUIT"));
+    }
+
     @Test
     void multiHopRing_scoresDecayWithDistance() {
         // 团伙链：FRAUDSTER —IP1— MULE —IP2— RECRUIT；CLEAN完全隔离
