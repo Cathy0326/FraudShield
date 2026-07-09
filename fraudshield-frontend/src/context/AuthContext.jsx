@@ -1,26 +1,32 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { login as apiLogin } from '../services/api';
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
-  const [user,            setUser]            = useState(null);
-  const [token,           setToken]           = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const navigate = useNavigate();
+// localStorage必须在首次渲染前同步读取：之前用useEffect恢复登录态，
+// 但useEffect在首次渲染之后才执行 —— 刷新时第一帧isAuthenticated=false，
+// PrivateRoute已经把用户踢回/login了，恢复来晚一步。惰性初始化没有这个竞态。
+// Auth state must be read from localStorage synchronously, before the first
+// render: the old useEffect-based restore ran after the first render, so on
+// refresh PrivateRoute saw isAuthenticated=false for one frame and had already
+// redirected to /login by the time the effect fired. Lazy useState initializers
+// have no such race.
+function restoreUser() {
+  try {
+    const stored = localStorage.getItem('user');
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null; // corrupted entry - treat as logged out
+  }
+}
 
-  // 挂载时从localStorage恢复登录状态
-  // Restore auth state from localStorage on mount (survives page reload)
-  useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    const storedUser  = localStorage.getItem('user');
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser));
-      setIsAuthenticated(true);
-    }
-  }, []);
+export function AuthProvider({ children }) {
+  const [user,            setUser]            = useState(restoreUser);
+  const [token,           setToken]           = useState(() => localStorage.getItem('token'));
+  const [isAuthenticated, setIsAuthenticated] = useState(
+      () => Boolean(localStorage.getItem('token') && restoreUser()));
+  const navigate = useNavigate();
 
   const login = async (username, password) => {
     const data = await apiLogin(username, password);
