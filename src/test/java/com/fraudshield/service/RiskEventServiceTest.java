@@ -144,6 +144,8 @@ class RiskEventServiceTest {
         var impact2 = service.getFinancialImpact();
         assertThat(impact2.getInterceptToFalseKillRatio()).isNull();
         assertThat(impact2.getApprovedAmount()).isEqualTo(100.0);
+    }
+
     // ── 基线与周同比 / trend baseline & week-over-week ────────────────────────
 
     @Test
