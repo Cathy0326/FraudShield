@@ -107,7 +107,7 @@ public class AzureOpenAIService {
                 Respond in JSON format with exactly these fields:
                 {
                   "aiRiskLevel": "HIGH|MEDIUM|LOW|NORMAL",
-                  "confidence": 0.0-1.0,
+                  "confidence": <a single decimal number between 0.0 and 1.0, e.g. 0.85>,
                   "reasoning": "brief explanation",
                   "recommendation": "block|manual_review|monitor|allow",
                   "keyFactors": ["factor1", "factor2"]
@@ -144,11 +144,17 @@ public class AzureOpenAIService {
         // Unified Azure OpenAI v1 inference API — OpenAI-compatible chat completions.
         String url = normalizeEndpoint(endpoint) + "/chat/completions";
 
+        // response_format=json_object：模型层保证输出合法JSON —— 修复偶发的
+        // "LLM自己写坏JSON"导致的解析失败（如 confidence: 0. 后跟空格）。
+        // JSON mode guarantees syntactically valid JSON at the model layer,
+        // fixing the intermittent parse failures caused by the LLM itself
+        // emitting malformed JSON (e.g. a dangling decimal point).
         String requestBody = objectMapper.writeValueAsString(java.util.Map.of(
                 "model", deployment,
                 "messages", List.of(
                         java.util.Map.of("role", "user", "content", prompt)
                 ),
+                "response_format", java.util.Map.of("type", "json_object"),
                 "max_tokens", 500,
                 "temperature", 0.3
         ));
@@ -187,6 +193,15 @@ public class AzureOpenAIService {
         // 去掉可能存在的markdown代码块标记
         // Strip markdown fences if the model wrapped its JSON in ```json ... ```
         content = content.replaceAll("```json\\s*", "").replaceAll("```\\s*", "").trim();
+
+        // 防御性截取：即使模型在JSON前后加了闲话，也只取首个{到最后一个}之间
+        // Defensive slice: even if the model added chatter around the JSON,
+        // parse only from the first '{' to the last '}'.
+        int firstBrace = content.indexOf('{');
+        int lastBrace  = content.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            content = content.substring(firstBrace, lastBrace + 1);
+        }
 
         JsonNode parsed  = objectMapper.readTree(content);
 
