@@ -1,6 +1,7 @@
 package com.fraudshield.controller;
 
 import com.fraudshield.dto.DashboardStatsDTO;
+import com.fraudshield.dto.FinancialImpactDTO;
 import com.fraudshield.dto.GraphRiskScoreDTO;
 import com.fraudshield.dto.RiskEventDTO;
 import com.fraudshield.dto.RulePrecisionDTO;
@@ -79,6 +80,12 @@ public class RiskEventController {
                 .explanation(event.getExplanation())
                 .build();
         return ResponseEntity.ok(aiService.analyze(order, riskResult));
+    }
+
+    // GET /api/risk-events/financial-impact — intercepted $ vs wrongly blocked $ (finance view)
+    @GetMapping("/financial-impact")
+    public ResponseEntity<FinancialImpactDTO> getFinancialImpact() {
+        return ResponseEntity.ok(riskEventService.getFinancialImpact());
     }
 
     // GET /api/risk-events/rule-precision — per-rule accuracy computed from review labels

@@ -123,6 +123,29 @@ class RiskEventServiceTest {
         verify(valueOps).increment("counter:normal_orders");
     }
 
+    // ── 财务影响 / financial impact ───────────────────────────────────────────
+
+    @Test
+    void financialImpact_sumsAmountsByOutcome_ratioGuardsDivZero() {
+        event1.setReviewStatus("CONFIRMED_FRAUD");  // $100 intercepted
+        event2.setReviewStatus("FALSE_POSITIVE");   // $100 wrongly blocked
+        event3.setReviewStatus("PENDING_REVIEW");   // pending - excluded
+        when(repository.findAll()).thenReturn(List.of(event1, event2, event3));
+
+        var impact = service.getFinancialImpact();
+
+        assertThat(impact.getInterceptedAmount()).isEqualTo(100.0);
+        assertThat(impact.getFalsePositiveAmount()).isEqualTo(100.0);
+        assertThat(impact.getInterceptToFalseKillRatio()).isEqualTo(1.0);
+
+        // 误杀为0时比率为null（前端显示∞），绝不除零
+        // ratio is null (frontend shows infinity) when nothing was wrongly blocked
+        event2.setReviewStatus("APPROVED");
+        var impact2 = service.getFinancialImpact();
+        assertThat(impact2.getInterceptToFalseKillRatio()).isNull();
+        assertThat(impact2.getApprovedAmount()).isEqualTo(100.0);
+    }
+
     // ── 审核工作流 / Review workflow ──────────────────────────────────────────
 
     @Test

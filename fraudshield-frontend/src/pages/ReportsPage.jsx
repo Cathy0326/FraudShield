@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getRecentEvents, getRulePrecision } from '../services/api';
+import { getRecentEvents, getRulePrecision, getFinancialImpact } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -30,11 +30,13 @@ export default function ReportsPage() {
   const [error,     setError]     = useState('');
   const [generated, setGenerated] = useState(false);
   const [rulePrecision, setRulePrecision] = useState([]);
+  const [impact, setImpact] = useState(null);
 
   // 规则精度独立于日期报表加载 —— 它反映的是全部历史标注
   // Rule precision loads independently of the date report — it reflects all labels to date
   useEffect(() => {
     getRulePrecision().then(setRulePrecision).catch(() => {});
+    getFinancialImpact().then(setImpact).catch(() => {});
   }, []);
 
   const handleGenerate = async () => {
@@ -90,6 +92,49 @@ export default function ReportsPage() {
 
         {error && (
           <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">{error}</div>
+        )}
+
+        {/* Financial Impact — 财务视角：拦截的损失 vs 误杀的营收 / finance view: losses avoided vs revenue wrongly blocked */}
+        {impact && (
+          <div className="bg-dark-card border border-dark-border rounded-xl p-5">
+            <h2 className="text-base font-semibold text-white">Financial Impact</h2>
+            <p className="text-xs text-slate-500 mt-1 mb-4">
+              From review decisions — every confirmed-fraud dollar is a chargeback avoided;
+              every false-positive dollar is legitimate revenue we wrongly blocked.
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="border border-green-500/30 rounded-lg p-4">
+                <p className="text-xs text-slate-400">Fraud Intercepted</p>
+                <p className="text-2xl font-bold text-green-400 mt-1">
+                  ${impact.interceptedAmount?.toFixed(2)}
+                </p>
+                <p className="text-xs text-slate-500">{impact.interceptedCount} orders</p>
+              </div>
+              <div className="border border-amber-500/30 rounded-lg p-4">
+                <p className="text-xs text-slate-400">Revenue Wrongly Blocked</p>
+                <p className="text-2xl font-bold text-amber-400 mt-1">
+                  ${impact.falsePositiveAmount?.toFixed(2)}
+                </p>
+                <p className="text-xs text-slate-500">{impact.falsePositiveCount} false positives</p>
+              </div>
+              <div className="border border-dark-border rounded-lg p-4">
+                <p className="text-xs text-slate-400">Reviewed &amp; Released</p>
+                <p className="text-2xl font-bold text-slate-200 mt-1">
+                  ${impact.approvedAmount?.toFixed(2)}
+                </p>
+                <p className="text-xs text-slate-500">{impact.approvedCount} orders</p>
+              </div>
+              <div className="border border-indigo-500/30 rounded-lg p-4">
+                <p className="text-xs text-slate-400">Intercept : False-Kill Ratio</p>
+                <p className="text-2xl font-bold text-indigo-300 mt-1">
+                  {impact.interceptToFalseKillRatio == null
+                    ? '∞'
+                    : `${impact.interceptToFalseKillRatio.toFixed(1)} : 1`}
+                </p>
+                <p className="text-xs text-slate-500">the fraud program&apos;s one-line ROI</p>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Rule Precision — 审核标注反哺规则质量评估 / review labels feeding back into rule quality */}
