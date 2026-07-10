@@ -72,18 +72,28 @@ export default function ReviewQueuePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-dark-border text-slate-400 text-xs uppercase tracking-wide">
-                      {['Detected', 'Order ID', 'User', 'Amount', 'Risk', 'Rules', ''].map((h, i) => (
+                      {['Priority', 'Detected', 'Order ID', 'User', 'Amount', 'Risk', 'Rules', ''].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left font-medium">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-dark-border">
-                    {queue.map(e => (
+                    {queue.map((e, idx) => (
                       <tr
                         key={e.id}
                         onClick={() => navigate(`/orders/${e.orderId}`)}
-                        className="hover:bg-dark-bg/50 cursor-pointer transition-colors"
+                        className={`cursor-pointer transition-colors ${
+                          idx < 3 ? 'bg-red-900/10 hover:bg-red-900/20' : 'hover:bg-dark-bg/50'
+                        }`}
                       >
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {/* 期望损失 = 风险分×金额，队列按此降序 / expected loss drives the sort */}
+                          <span className={`text-xs font-semibold ${
+                            idx < 3 ? 'text-red-300' : 'text-slate-500'
+                          }`}>
+                            {idx < 3 && '🔥 '}${((e.riskScore ?? 0) * (e.amount ?? 0)).toFixed(0)}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                           {e.detectedAt ? new Date(e.detectedAt).toLocaleString() : '—'}
                         </td>
