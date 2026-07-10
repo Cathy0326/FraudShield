@@ -73,4 +73,10 @@ export const getFinancialImpact = () =>
 export const getRulePrecision = () =>
   api.get('/api/risk-events/rule-precision').then((r) => r.data);
 
+export const getAuditChain = () =>
+  api.get('/api/audit').then((r) => r.data);
+
+export const verifyAuditChain = () =>
+  api.get('/api/audit/verify').then((r) => r.data);
+
 export default api;

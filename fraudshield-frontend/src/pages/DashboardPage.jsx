@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid,
   BarChart, Bar,
 } from 'recharts';
 import { getDashboardStats, getRecentEvents, triggerTestOrders } from '../services/api';
@@ -12,11 +12,17 @@ import LoadingSpinner from '../components/LoadingSpinner';
 
 const PIE_COLORS = { HIGH: '#ef4444', MEDIUM: '#f97316', LOW: '#eab308', NORMAL: '#22c55e' };
 
-function KpiCard({ label, value, sub, color }) {
+function KpiCard({ label, value, sub, color, delta }) {
+  // 周同比箭头：风险类指标"涨"是坏事 → 红↑绿↓ / for risk metrics, up is bad: red up, green down
+  const deltaBadge = delta == null || delta === 0 ? null : (
+    <span className={`ml-2 text-xs font-semibold ${delta > 0 ? 'text-red-400' : 'text-green-400'}`}>
+      {delta > 0 ? '▲' : '▼'} {Math.abs(delta)} vs last wk
+    </span>
+  );
   return (
     <div className={`bg-dark-card border border-dark-border rounded-xl p-5 ${color}`}>
       <p className="text-sm text-slate-400 mb-1">{label}</p>
-      <p className="text-3xl font-bold text-white">{value ?? '—'}</p>
+      <p className="text-3xl font-bold text-white">{value ?? '—'}{deltaBadge}</p>
       {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
     </div>
   );
@@ -78,11 +84,19 @@ export default function DashboardPage() {
     ? Object.entries(stats.ruleHitCounts).map(([name, count]) => ({ name, count }))
     : [];
 
-  // Hourly trend — show last 8 hours for readability
+  // Hourly trend — show last 8 hours for readability.
+  // 基线带 = 7日同钟点均值 ± 2σ；实际曲线穿出阴影 = 异常，一眼可见
+  // Baseline band = same-hour 7-day mean ± 2σ; the risk line escaping the
+  // shaded band is the visual anomaly signal.
   const trendData = stats?.hourlyTrend?.slice(-8).map(h => ({
     hour:       h.hour.split(' ')[1],
     orders:     h.orderCount,
     riskOrders: h.riskCount,
+    baseline:   h.baselineRisk,
+    band: [
+      Math.max(0, (h.baselineRisk ?? 0) - 2 * (h.baselineSigma ?? 0)),
+      (h.baselineRisk ?? 0) + 2 * (h.baselineSigma ?? 0),
+    ],
   })) ?? [];
 
   return (
@@ -124,8 +138,8 @@ export default function DashboardPage() {
             {/* Section A — KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard label="Total Processed"  value={totalProcessed}          sub="orders" />
-              <KpiCard label="High Risk"        value={stats?.highRiskCount}    sub="orders" color="border-red-500/30" />
-              <KpiCard label="Medium Risk"      value={stats?.mediumRiskCount}  sub="orders" color="border-orange-500/30" />
+              <KpiCard label="High Risk"        value={stats?.highRiskCount}    sub="orders" color="border-red-500/30" delta={stats?.highRiskWowDelta} />
+              <KpiCard label="Medium Risk"      value={stats?.mediumRiskCount}  sub="orders" color="border-orange-500/30" delta={stats?.mediumRiskWowDelta} />
               <KpiCard label="Risk Rate"        value={`${stats?.riskRate ?? 0}%`} color={riskRateColor} />
             </div>
 
@@ -149,17 +163,24 @@ export default function DashboardPage() {
               </div>
 
               <div className="bg-dark-card border border-dark-border rounded-xl p-5">
-                <h2 className="text-base font-semibold text-white mb-4">Hourly Trend (last 8h)</h2>
+                <h2 className="text-base font-semibold text-white mb-4">
+                  Hourly Trend (last 8h)
+                  <span className="ml-2 text-xs font-normal text-slate-500">
+                    shaded band = normal range (7-day same-hour mean ± 2σ)
+                  </span>
+                </h2>
                 <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={trendData}>
+                  <ComposedChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                     <XAxis dataKey="hour" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
                     <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8 }} />
                     <Legend />
+                    <Area type="monotone" dataKey="band" stroke="none" fill="#f59e0b" fillOpacity={0.12} name="Normal range" />
+                    <Line type="monotone" dataKey="baseline"   stroke="#f59e0b" strokeWidth={1} strokeDasharray="5 5" dot={false} name="7d baseline" />
                     <Line type="monotone" dataKey="orders"     stroke="#6366f1" strokeWidth={2} dot={false} name="Total" />
                     <Line type="monotone" dataKey="riskOrders" stroke="#ef4444" strokeWidth={2} dot={false} name="Risk" />
-                  </LineChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>

@@ -144,6 +144,51 @@ class RiskEventServiceTest {
         var impact2 = service.getFinancialImpact();
         assertThat(impact2.getInterceptToFalseKillRatio()).isNull();
         assertThat(impact2.getApprovedAmount()).isEqualTo(100.0);
+    // ── 基线与周同比 / trend baseline & week-over-week ────────────────────────
+
+    @Test
+    void hourlyTrend_baselineIsSameHourMeanOverPrior7Days() {
+        // 过去7天中的3天，在同一钟点各有1单HIGH → 该钟点基线均值 = 3/7
+        // 3 of the prior 7 days have one HIGH at the same hour -> baseline mean 3/7
+        LocalDateTime slot = LocalDateTime.now().withMinute(0).withSecond(0).withNano(0);
+        List<RiskEvent> window = List.of(
+                buildEvent(10L, "ORD-D1", "HIGH", 1.0, "R", slot.minusDays(1).plusMinutes(5)),
+                buildEvent(11L, "ORD-D2", "HIGH", 1.0, "R", slot.minusDays(2).plusMinutes(10)),
+                buildEvent(12L, "ORD-D3", "HIGH", 1.0, "R", slot.minusDays(3).plusMinutes(20)));
+        when(repository.findByDetectedAtBetween(any(), any())).thenReturn(window);
+        when(repository.countByRiskLevel(any())).thenReturn(0L);
+        when(repository.findAll()).thenReturn(List.of());
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(any())).thenReturn("0");
+
+        DashboardStatsDTO stats = service.getDashboardStats();
+
+        // 当前小时是趋势的最后一个桶 / the current hour is the trend's last bucket
+        var current = stats.getHourlyTrend().get(23);
+        assertThat(current.getBaselineRisk()).isEqualTo(0.43);   // 3/7 rounded
+        assertThat(current.getBaselineSigma()).isGreaterThan(0.0);
+    }
+
+    @Test
+    void weekOverWeekDeltas_compareLast7dAgainstPrior7d() {
+        LocalDateTime now = LocalDateTime.now();
+        List<RiskEvent> window = List.of(
+                // 近7天：2 HIGH / this week: two HIGH
+                buildEvent(20L, "ORD-W1", "HIGH", 1.0, "R", now.minusDays(1)),
+                buildEvent(21L, "ORD-W2", "HIGH", 1.0, "R", now.minusDays(2)),
+                // 上个7天：1 HIGH, 1 MEDIUM / prior week: one of each
+                buildEvent(22L, "ORD-P1", "HIGH", 1.0, "R", now.minusDays(9)),
+                buildEvent(23L, "ORD-P2", "MEDIUM", 0.6, "R", now.minusDays(10)));
+        when(repository.findByDetectedAtBetween(any(), any())).thenReturn(window);
+        when(repository.countByRiskLevel(any())).thenReturn(0L);
+        when(repository.findAll()).thenReturn(List.of());
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get(any())).thenReturn("0");
+
+        DashboardStatsDTO stats = service.getDashboardStats();
+
+        assertThat(stats.getHighRiskWowDelta()).isEqualTo(1L);    // 2 - 1
+        assertThat(stats.getMediumRiskWowDelta()).isEqualTo(-1L); // 0 - 1
     }
 
     // ── 审核工作流 / Review workflow ──────────────────────────────────────────

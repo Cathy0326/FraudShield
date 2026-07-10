@@ -81,7 +81,18 @@ public class RiskEventService {
         // Rule hit counts: parse the triggeredRules CSV field across all stored events
         Map<String, Long> ruleHitCounts = buildRuleHitCounts();
 
-        List<HourlyStatDTO> hourlyTrend = buildHourlyTrend();
+        // 一次取14天窗口，趋势/基线/周同比全部在内存分桶 —— 不再每小时查一次DB
+        // One 14-day fetch; trend, baseline, and week-over-week are all bucketed
+        // in memory - no more one-query-per-hour.
+        LocalDateTime now = LocalDateTime.now();
+        List<RiskEvent> window = repository.findByDetectedAtBetween(now.minusDays(14), now);
+
+        List<HourlyStatDTO> hourlyTrend = buildHourlyTrend(window, now);
+
+        long highMedLast7d = countFlagged(window, now.minusDays(7), now, "HIGH");
+        long highMedPrev7d = countFlagged(window, now.minusDays(14), now.minusDays(7), "HIGH");
+        long medLast7d = countFlagged(window, now.minusDays(7), now, "MEDIUM");
+        long medPrev7d = countFlagged(window, now.minusDays(14), now.minusDays(7), "MEDIUM");
 
         return DashboardStatsDTO.builder()
                 .totalOrders(total)
@@ -92,7 +103,18 @@ public class RiskEventService {
                 .riskRate(Math.round(riskRate * 100.0) / 100.0)
                 .ruleHitCounts(ruleHitCounts)
                 .hourlyTrend(hourlyTrend)
+                .highRiskWowDelta(highMedLast7d - highMedPrev7d)
+                .mediumRiskWowDelta(medLast7d - medPrev7d)
                 .build();
+    }
+
+    private long countFlagged(List<RiskEvent> events, LocalDateTime from, LocalDateTime to,
+                              String level) {
+        return events.stream()
+                .filter(e -> e.getDetectedAt() != null
+                        && !e.getDetectedAt().isBefore(from) && e.getDetectedAt().isBefore(to)
+                        && level.equals(e.getRiskLevel()))
+                .count();
     }
 
     /**
@@ -349,25 +371,56 @@ public class RiskEventService {
                 .collect(Collectors.groupingBy(r -> r, Collectors.counting()));
     }
 
-    private List<HourlyStatDTO> buildHourlyTrend() {
-        // 最近24小时，每小时一个桶
-        // One bucket per hour for the last 24 hours
-        List<HourlyStatDTO> trend = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
+    /**
+     * 近24小时趋势 + 每小时段的7日基线（均值±σ）
+     * Last-24h trend plus a per-hour-slot 7-day baseline (mean ± σ).
+     *
+     * <p>基线口径：对每个小时桶，取**过去7天同一钟点**的风险单数样本算均值和标准差。
+     * 按钟点对齐（而不是简单的滚动均值）是为了吸收日内周期 —— 凌晨3点和晚8点的
+     * "正常水平"本来就不同，混在一起的基线会在低谷虚报、在高峰漏报。
+     * The baseline for each hourly bucket is the mean/std-dev of risk counts at the
+     * SAME hour of day over the prior 7 days. Aligning by hour-of-day (rather than a
+     * rolling mean) absorbs the intraday cycle - 3 AM and 8 PM have different
+     * "normal", and a mixed baseline would false-alarm in the trough and miss in
+     * the peak.
+     */
+    private List<HourlyStatDTO> buildHourlyTrend(List<RiskEvent> window, LocalDateTime now) {
+        // 每小时桶的风险单数，key为整点 / risk counts per hour bucket, keyed by truncated hour
+        Map<LocalDateTime, long[]> buckets = new HashMap<>(); // [orderCount, riskCount]
+        for (RiskEvent e : window) {
+            if (e.getDetectedAt() == null) {
+                continue;
+            }
+            LocalDateTime slot = e.getDetectedAt().withMinute(0).withSecond(0).withNano(0);
+            long[] counts = buckets.computeIfAbsent(slot, k -> new long[2]);
+            counts[0]++;
+            if ("HIGH".equals(e.getRiskLevel()) || "MEDIUM".equals(e.getRiskLevel())) {
+                counts[1]++;
+            }
+        }
 
+        List<HourlyStatDTO> trend = new ArrayList<>();
         for (int i = 23; i >= 0; i--) {
             LocalDateTime start = now.minusHours(i).withMinute(0).withSecond(0).withNano(0);
-            LocalDateTime end   = start.plusHours(1);
+            long[] counts = buckets.getOrDefault(start, new long[2]);
 
-            List<RiskEvent> events = repository.findByDetectedAtBetween(start, end);
-            long riskCount = events.stream()
-                    .filter(e -> "HIGH".equals(e.getRiskLevel()) || "MEDIUM".equals(e.getRiskLevel()))
-                    .count();
+            // 过去7天同一钟点的样本 / same-hour samples from the prior 7 days
+            double sum = 0;
+            double sumSq = 0;
+            for (int d = 1; d <= 7; d++) {
+                long risk = buckets.getOrDefault(start.minusDays(d), new long[2])[1];
+                sum += risk;
+                sumSq += (double) risk * risk;
+            }
+            double mean = sum / 7.0;
+            double sigma = Math.sqrt(Math.max(0.0, sumSq / 7.0 - mean * mean));
 
             trend.add(HourlyStatDTO.builder()
                     .hour(start.format(HOUR_FMT))
-                    .orderCount((long) events.size())
-                    .riskCount(riskCount)
+                    .orderCount(counts[0])
+                    .riskCount(counts[1])
+                    .baselineRisk(Math.round(mean * 100.0) / 100.0)
+                    .baselineSigma(Math.round(sigma * 100.0) / 100.0)
                     .build());
         }
         return trend;
