@@ -193,6 +193,25 @@ class RiskEventServiceTest {
         assertThat(queue.get(0).getReviewStatus()).isEqualTo("PENDING_REVIEW");
     }
 
+    @Test
+    void getReviewQueue_sortsByExpectedLoss_scoreTimesAmount() {
+        // $15的HIGH(1.0)=15 < $2000的MEDIUM(0.6)=1200 —— 金额大的可疑单排前面
+        // a $2,000 MEDIUM outranks a $15 HIGH: expected loss 1200 vs 15
+        RiskEvent smallHigh = buildEvent(30L, "ORD-SMALL", "HIGH", 1.0, "R", LocalDateTime.now());
+        smallHigh.setAmount(15.0);
+        RiskEvent bigMedium = buildEvent(31L, "ORD-BIG", "MEDIUM", 0.6, "R", LocalDateTime.now());
+        bigMedium.setAmount(2000.0);
+        RiskEvent nullScore = buildEvent(32L, "ORD-NULLS", "LOW", 0.0, "R", LocalDateTime.now());
+        nullScore.setRiskScore(null);
+        nullScore.setAmount(null);
+        when(repository.findPendingReview()).thenReturn(List.of(smallHigh, nullScore, bigMedium));
+
+        List<RiskEventDTO> queue = service.getReviewQueue();
+
+        assertThat(queue).extracting(RiskEventDTO::getOrderId)
+                .containsExactly("ORD-BIG", "ORD-SMALL", "ORD-NULLS");
+    }
+
     // ── 幂等计数器：首次处理 → SETNX成功 → 计数+1 ─────────────────────────────
     // Idempotent counter: first delivery sets the marker and increments
     @Test

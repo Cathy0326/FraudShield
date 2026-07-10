@@ -181,10 +181,22 @@ public class RiskEventService {
      * Review queue: every flagged event awaiting a human decision, oldest risk first.
      */
     public List<RiskEventDTO> getReviewQueue() {
+        // 优先级 = 风险分 × 金额：$2000的HIGH单和$15的MEDIUM单不该同等排队。
+        // 真实审核员按"期望损失"处理 —— 这正是expected loss的最简代理。
+        // Priority = riskScore x amount: a $2,000 HIGH order and a $15 MEDIUM one
+        // should not queue equally. Reviewers triage by expected loss, and
+        // score x amount is its simplest proxy.
         return repository.findPendingReview()
                 .stream()
+                .sorted(Comparator.comparingDouble(RiskEventService::expectedLoss).reversed())
                 .map(RiskEventDTO::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    private static double expectedLoss(RiskEvent e) {
+        double score = e.getRiskScore() == null ? 0.0 : e.getRiskScore();
+        double amount = e.getAmount() == null ? 0.0 : e.getAmount();
+        return score * amount;
     }
 
     /**
