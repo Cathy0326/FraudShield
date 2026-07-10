@@ -6,6 +6,7 @@ import DashboardPage    from './pages/DashboardPage';
 import OrderDetailPage  from './pages/OrderDetailPage';
 import ReviewQueuePage  from './pages/ReviewQueuePage';
 import ReportsPage      from './pages/ReportsPage';
+import AuditPage        from './pages/AuditPage';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/orders/:orderId" element={<OrderDetailPage />} />
             <Route path="/review"          element={<ReviewQueuePage />} />
             <Route path="/reports"         element={<ReportsPage />} />
+            <Route path="/audit"           element={<AuditPage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
