@@ -1,6 +1,7 @@
 package com.fraudshield.service;
 
 import com.fraudshield.dto.DashboardStatsDTO;
+import com.fraudshield.dto.FinancialImpactDTO;
 import com.fraudshield.dto.HourlyStatDTO;
 import com.fraudshield.dto.RiskEventDTO;
 import com.fraudshield.dto.RulePrecisionDTO;
@@ -305,6 +306,50 @@ public class RiskEventService {
                         (RulePrecisionDTO d) -> d.getFalsePositive() + d.getApproved()).reversed()
                         .thenComparing(RulePrecisionDTO::getRule))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 财务影响汇总 — 用美元回答"风控值不值"：拦截额 vs 误杀额
+     * Financial impact: answers "is the fraud program worth it" in dollars -
+     * intercepted losses vs wrongly blocked revenue. Demo-scale full scan,
+     * same documented trade-off as the other aggregations.
+     */
+    public FinancialImpactDTO getFinancialImpact() {
+        double intercepted = 0;
+        double falseKill = 0;
+        double released = 0;
+        long nIntercepted = 0;
+        long nFalseKill = 0;
+        long nReleased = 0;
+
+        for (RiskEvent e : repository.findAll()) {
+            double amount = e.getAmount() == null ? 0.0 : e.getAmount();
+            String status = e.getReviewStatus();
+            if ("CONFIRMED_FRAUD".equals(status)) {
+                intercepted += amount;
+                nIntercepted++;
+            } else if ("FALSE_POSITIVE".equals(status)) {
+                falseKill += amount;
+                nFalseKill++;
+            } else if ("APPROVED".equals(status)) {
+                released += amount;
+                nReleased++;
+            }
+        }
+
+        return FinancialImpactDTO.builder()
+                .interceptedAmount(round2(intercepted))
+                .falsePositiveAmount(round2(falseKill))
+                .approvedAmount(round2(released))
+                .interceptedCount(nIntercepted)
+                .falsePositiveCount(nFalseKill)
+                .approvedCount(nReleased)
+                .interceptToFalseKillRatio(falseKill == 0 ? null : round2(intercepted / falseKill))
+                .build();
+    }
+
+    private double round2(double v) {
+        return Math.round(v * 100.0) / 100.0;
     }
 
     public void deleteEvent(Long id) {

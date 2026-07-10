@@ -67,6 +67,9 @@ export const getReviewQueue = () =>
 export const submitReview = (orderId, decision, notes) =>
   api.post(`/api/risk-events/${orderId}/review`, { decision, notes }).then((r) => r.data);
 
+export const getFinancialImpact = () =>
+  api.get('/api/risk-events/financial-impact').then((r) => r.data);
+
 export const getRulePrecision = () =>
   api.get('/api/risk-events/rule-precision').then((r) => r.data);
 
