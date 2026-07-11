@@ -12,6 +12,7 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.List;
@@ -76,7 +77,16 @@ public final class AuditChainService {
                 .map(ReviewAuditRecord::getRecordHash)
                 .orElse(GENESIS);
 
-        LocalDateTime now = LocalDateTime.now();
+        // 截断到毫秒：数据库TIMESTAMP列的精度低于LocalDateTime.now()的纳秒。哈希覆盖了
+        // decidedAt，落库再读回会丢掉纳秒 —— 若按纳秒算哈希，验证时按截断值重算就不匹配，
+        // 把一条干净记录误报成"篡改"。毫秒精度所有目标库（H2/PostgreSQL）都能无损保存，
+        // 从根上消除这个误报。
+        // Truncate to milliseconds before hashing AND storing: DB TIMESTAMP columns are
+        // coarser than LocalDateTime.now()'s nanoseconds. The hash covers decidedAt, so
+        // the write→read round-trip would drop the nanos and make verify recompute a
+        // different hash — falsely flagging a clean record as tampered. Every target DB
+        // (H2/PostgreSQL) stores millisecond precision losslessly, killing the false alarm.
+        LocalDateTime now = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
         ReviewAuditRecord record = ReviewAuditRecord.builder()
                 .orderId(orderId)
                 .decision(decision)

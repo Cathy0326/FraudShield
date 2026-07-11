@@ -112,6 +112,31 @@ class AuditChainServiceTest {
     }
 
     @Test
+    void chainSurvivesDatabaseTimestampPrecisionLoss() {
+        // 回归测试：审计哈希覆盖了decidedAt，而数据库TIMESTAMP列的精度（微秒）
+        // 低于LocalDateTime.now()（纳秒）。落库再读回会截断纳秒 —— 若append按纳秒
+        // 计算哈希，验证时按截断后的值重算就会不匹配，把一条干净记录误报成"篡改"。
+        // 这里模拟列精度：把读回的decidedAt截断到微秒，断言链仍然有效。
+        // Regression: the audit hash covers decidedAt, but a DB TIMESTAMP column's
+        // precision (microseconds) is coarser than LocalDateTime.now() (nanoseconds).
+        // The write→read round-trip truncates the nanos, so if append hashed the
+        // nanosecond value, verify recomputes from the truncated value and mismatches,
+        // falsely flagging a clean record as tampered. Simulate the column precision by
+        // truncating the read-back decidedAt to micros and assert the chain still verifies.
+        service.append("ORD-1", "FALSE_POSITIVE", "admin");
+        service.append("ORD-2", "CONFIRMED_FRAUD", "operator");
+
+        stored.forEach(r -> r.setDecidedAt(
+                r.getDecidedAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS)));
+
+        Map<String, Object> result = service.verifyChain();
+
+        assertThat(result.get("valid"))
+                .as("a clean chain must stay valid after DB timestamp precision truncation")
+                .isEqualTo(true);
+    }
+
+    @Test
     void unkeyedMode_stillDetectsTampering() {
         // 无密钥降级为SHA-256：仍能发现随手篡改（防不住带重算的攻击，已在文档说明）
         // Unkeyed fallback still catches casual edits (recompute attacks documented)
