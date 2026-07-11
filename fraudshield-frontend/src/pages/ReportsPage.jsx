@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getRecentEvents, getRulePrecision, getFinancialImpact } from '../services/api';
+import { getEventsByDateRange, getRulePrecision, getFinancialImpact } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -22,9 +22,18 @@ function exportCsv(events) {
   URL.revokeObjectURL(url); // 释放内存 / free the temporary URL
 }
 
+// yyyy-MM-dd（本地时区）— input[type=date]的取值格式 / local-date string for date inputs
+function isoDate(d) {
+  const tzAdjusted = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return tzAdjusted.toISOString().split('T')[0];
+}
+
 export default function ReportsPage() {
-  const [startDate, setStartDate] = useState('');
-  const [endDate,   setEndDate]   = useState('');
+  // 默认最近7天 —— 让日期选择器一打开就"能用"，而不是两个空框
+  // Default to the last 7 days so the pickers work out of the box, not two empty boxes
+  const [startDate, setStartDate] = useState(() =>
+    isoDate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+  const [endDate,   setEndDate]   = useState(() => isoDate(new Date()));
   const [events,    setEvents]    = useState([]);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
@@ -40,11 +49,21 @@ export default function ReportsPage() {
   }, []);
 
   const handleGenerate = async () => {
+    if (!startDate || !endDate) {
+      setError('Please select both a From and a To date.');
+      return;
+    }
+    if (startDate > endDate) {
+      setError('The From date must not be after the To date.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
-      // Use recent events as a proxy; a real backend would accept date params
-      const data = await getRecentEvents(50);
+      // 日期真正生效：后端 /range 接口按 detectedAt 过滤（两端日期都包含）
+      // The dates are honored now — the /range endpoint filters by detectedAt,
+      // both endpoint days inclusive
+      const data = await getEventsByDateRange(startDate, endDate);
       setEvents(data);
       setGenerated(true);
     } catch {
@@ -67,14 +86,21 @@ export default function ReportsPage() {
         <div className="bg-dark-card border border-dark-border rounded-xl p-5">
           <h2 className="text-base font-semibold text-white mb-4">Date Range</h2>
           <div className="flex flex-wrap items-end gap-4">
+            {/* colorScheme:'dark' —— 否则Chrome把日历图标画成黑色，深色背景上完全不可见，
+                看起来就像"选不了日期" / without it Chrome renders the calendar icon black
+                on our dark background — invisible, so the picker seems broken */}
             <div>
               <label className="block text-xs text-slate-400 mb-1.5">From</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              <input type="date" value={startDate} max={endDate || undefined}
+                onChange={e => setStartDate(e.target.value)}
+                style={{ colorScheme: 'dark' }}
                 className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1.5">To</label>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+              <input type="date" value={endDate} min={startDate || undefined}
+                onChange={e => setEndDate(e.target.value)}
+                style={{ colorScheme: 'dark' }}
                 className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <button onClick={handleGenerate} disabled={loading}

@@ -46,6 +46,9 @@ export const getRecentEvents = (limit = 10) =>
 export const getEventsByRiskLevel = (level) =>
   api.get(`/api/risk-events?riskLevel=${level}`).then((r) => r.data);
 
+export const getEventsByDateRange = (from, to) =>
+  api.get(`/api/risk-events/range?from=${from}&to=${to}`).then((r) => r.data);
+
 export const getDashboardStats = () =>
   api.get('/api/risk-events/stats').then((r) => r.data);
 

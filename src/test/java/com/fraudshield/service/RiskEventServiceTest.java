@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -254,6 +255,40 @@ class RiskEventServiceTest {
 
         assertThatThrownBy(() -> service.reviewEvent("NOPE", "APPROVED", "admin", null))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getEventsByDateRange_bothEndpointDaysInclusive_sortedNewestFirst() {
+        LocalDate from = LocalDate.of(2026, 7, 1);
+        LocalDate to   = LocalDate.of(2026, 7, 10);
+        // 传给repository的区间必须是 [from 00:00, to次日00:00)，否则to当天数据被截掉
+        // Repository range must be [from 00:00, day-after-to 00:00) or the 'to' day is cut off
+        when(repository.findByDetectedAtBetween(
+                LocalDateTime.of(2026, 7, 1, 0, 0),
+                LocalDateTime.of(2026, 7, 11, 0, 0)))
+                .thenReturn(List.of(event2, event1)); // out of order on purpose
+
+        List<RiskEventDTO> result = service.getEventsByDateRange(from, to);
+
+        assertThat(result).hasSize(2);
+        // event1 is newer than event2 — service must sort newest first
+        assertThat(result.get(0).getOrderId()).isEqualTo("ORD-001");
+        assertThat(result.get(1).getOrderId()).isEqualTo("ORD-002");
+    }
+
+    @Test
+    void getEventsByDateRange_fromAfterTo_throwsBadRequest() {
+        assertThatThrownBy(() -> service.getEventsByDateRange(
+                LocalDate.of(2026, 7, 10), LocalDate.of(2026, 7, 1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not be after");
+        verify(repository, never()).findByDetectedAtBetween(any(), any());
+    }
+
+    @Test
+    void getEventsByDateRange_missingDate_throwsBadRequest() {
+        assertThatThrownBy(() -> service.getEventsByDateRange(null, LocalDate.now()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

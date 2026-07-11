@@ -13,11 +13,13 @@ import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskResult;
 import com.fraudshield.service.AzureOpenAIService;
 import com.fraudshield.service.RiskEventService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -51,6 +53,15 @@ public class RiskEventController {
             return ResponseEntity.ok(riskEventService.getEventsByRiskLevel(riskLevel));
         }
         return ResponseEntity.ok(riskEventService.getRecentEvents(50));
+    }
+
+    // GET /api/risk-events/range?from=2026-07-01&to=2026-07-11 — Reports date-range query
+    // 两端日期都包含；from > to 返回400 / both days inclusive; from > to yields 400
+    @GetMapping("/range")
+    public ResponseEntity<List<RiskEventDTO>> getEventsByDateRange(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ResponseEntity.ok(riskEventService.getEventsByDateRange(from, to));
     }
 
     // GET /api/risk-events/stats
