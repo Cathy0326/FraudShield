@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -51,6 +52,32 @@ public class RiskEventService {
     public List<RiskEventDTO> getEventsByRiskLevel(String riskLevel) {
         return repository.findByRiskLevelOrderByDetectedAtDesc(riskLevel)
                 .stream()
+                .map(RiskEventDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 日期范围查询 — Reports页面的数据源。此前前端的日期选择器是摆设：
+     * 后端没有接受日期参数的接口，"Generate Report"实际只拉最近10条。
+     * Date-range query backing the Reports page. Until this endpoint existed the
+     * frontend date pickers were decorative - "Generate Report" silently fetched
+     * the 10 most recent events regardless of the chosen dates.
+     *
+     * <p>区间口径：[from 00:00, to次日00:00)，即两端日期都完整包含。
+     * Range is [from at 00:00, day-after-to at 00:00) — both endpoint days inclusive.
+     */
+    public List<RiskEventDTO> getEventsByDateRange(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("Both 'from' and 'to' dates are required");
+        }
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException(
+                    "'from' date " + from + " must not be after 'to' date " + to);
+        }
+        return repository.findByDetectedAtBetween(from.atStartOfDay(), to.plusDays(1).atStartOfDay())
+                .stream()
+                .sorted(Comparator.comparing(RiskEvent::getDetectedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
                 .map(RiskEventDTO::fromEntity)
                 .collect(Collectors.toList());
     }

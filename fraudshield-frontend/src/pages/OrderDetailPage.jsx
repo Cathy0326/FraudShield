@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getEventByOrderId, getAiAnalysis, getUserRiskProfile, submitReview } from '../services/api';
+import { getEventByOrderId, getAiAnalysis, getUserRiskProfile, submitReview, getReviewQueue } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -18,6 +18,24 @@ export default function OrderDetailPage() {
   const [reviewNotes,  setReviewNotes]  = useState('');
   const [reviewing,    setReviewing]    = useState(false);
   const [reviewError,  setReviewError]  = useState('');
+  // 待审队列快照：让审核员能在订单之间前后翻页，而不是每单都退回队列面板
+  // Review-queue snapshot: lets reviewers page between orders instead of
+  // bouncing back to the queue panel after every decision
+  const [queueIds, setQueueIds] = useState([]);
+
+  useEffect(() => {
+    // 队列按期望损失排序（与Review Queue页一致），失败时安静地隐藏翻页按钮
+    // Same expected-loss order as the Review Queue page; on failure the
+    // prev/next buttons simply don't render
+    getReviewQueue()
+      .then(queue => setQueueIds(queue.map(e => e.orderId)))
+      .catch(() => setQueueIds([]));
+  }, [orderId]);
+
+  const queuePos = queueIds.indexOf(orderId);
+  const prevOrderId = queuePos > 0 ? queueIds[queuePos - 1] : null;
+  const nextOrderId = queuePos >= 0 && queuePos < queueIds.length - 1
+    ? queueIds[queuePos + 1] : null;
 
   useEffect(() => {
     getEventByOrderId(orderId)
@@ -69,13 +87,39 @@ export default function OrderDetailPage() {
     <div className="min-h-screen bg-dark-bg">
       <NavBar />
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             onClick={() => navigate('/dashboard')}
             className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
           >
             ← Back to Dashboard
           </button>
+
+          {/* 队列翻页器：当前订单在待审队列中时显示，按期望损失顺序前后移动
+              Queue pager — shown while this order is in the review queue; moves
+              through the same expected-loss order the queue page uses */}
+          {queuePos >= 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => prevOrderId && navigate(`/orders/${prevOrderId}`)}
+                disabled={!prevOrderId}
+                className="text-sm px-3 py-1.5 bg-dark-card border border-dark-border hover:border-indigo-500/50 disabled:opacity-40 disabled:hover:border-dark-border text-slate-300 rounded-lg transition-colors"
+              >
+                ← Prev
+              </button>
+              <span className="text-xs text-slate-500 whitespace-nowrap">
+                {queuePos + 1} of {queueIds.length} in queue
+              </span>
+              <button
+                onClick={() => nextOrderId && navigate(`/orders/${nextOrderId}`)}
+                disabled={!nextOrderId}
+                className="text-sm px-3 py-1.5 bg-dark-card border border-dark-border hover:border-indigo-500/50 disabled:opacity-40 disabled:hover:border-dark-border text-slate-300 rounded-lg transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+
           {/* 争议证据包：订单+判定+审核+审计链哈希一键成文档，打chargeback官司用
               Dispute evidence: order + verdict + review + chain hashes as one document */}
           {event && (
@@ -185,6 +229,28 @@ export default function OrderDetailPage() {
                     <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
                       <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Notes</p>
                       <p className="text-sm text-slate-300">{event.reviewNotes}</p>
+                    </div>
+                  )}
+                  {/* 决定提交后直接进入下一单 —— 审核是流水线作业，不该每单都退回面板
+                      Straight to the next order after deciding — reviewing is assembly-line
+                      work; nobody should bounce back to the queue panel between orders */}
+                  {queuePos >= 0 && (
+                    <div className="pt-2">
+                      {nextOrderId ? (
+                        <button
+                          onClick={() => navigate(`/orders/${nextOrderId}`)}
+                          className="text-sm px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+                        >
+                          Review Next Order →
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => navigate('/review')}
+                          className="text-sm px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                        >
+                          Queue done — back to Review Queue
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
