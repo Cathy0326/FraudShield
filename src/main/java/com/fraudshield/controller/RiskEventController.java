@@ -1,6 +1,7 @@
 package com.fraudshield.controller;
 
 import com.fraudshield.dto.DashboardStatsDTO;
+import com.fraudshield.dto.DisputeEvidenceDTO;
 import com.fraudshield.dto.FinancialImpactDTO;
 import com.fraudshield.dto.GraphRiskScoreDTO;
 import com.fraudshield.dto.RiskEventDTO;
@@ -80,6 +81,17 @@ public class RiskEventController {
                 .explanation(event.getExplanation())
                 .build();
         return ResponseEntity.ok(aiService.analyze(order, riskResult));
+    }
+
+    // GET /api/risk-events/{orderId}/dispute-evidence — chargeback evidence package
+    // 组装订单事实+风控判定+审核决定+审计链哈希，供商户提交给发卡行打争议官司
+    // Assembles order facts + risk verdict + review decision + audit-chain hashes
+    // into one exhibit the merchant can submit when fighting a chargeback.
+    @GetMapping("/{orderId}/dispute-evidence")
+    public ResponseEntity<DisputeEvidenceDTO> getDisputeEvidence(
+            @PathVariable String orderId, Authentication authentication) {
+        return ResponseEntity.ok(riskEventService.getDisputeEvidence(
+                orderId, authentication.getName()));
     }
 
     // GET /api/risk-events/financial-impact — intercepted $ vs wrongly blocked $ (finance view)

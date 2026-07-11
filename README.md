@@ -24,6 +24,7 @@ user and their IPs, (3) seeds graph risk propagation across the whole fraud ring
 |---|---|---|
 | **Volume** | Clumsy fraud — too much, too fast | `FrequentIpRule` (velocity), `AbnormalAmountRule` (EMA deviation), `HighAmountNewUserRule` |
 | **Identity** | Repeat offenders | `BlacklistRule` (curated Redis sets), `ConfirmedFraudHistoryRule` (auto-generated from review labels — no manual sync) |
+| **Pattern** | Card testing ("John Doe" attacks) | `CardTestingRule` — micro-charges (≤$10) × many distinct identities × one IP/device in a 10-min Redis sliding window. Velocity rules miss this: the attacker slows down but can't hide the small-amount + multi-identity combination |
 | **Relationship** | Organized fraud rings | Shared-IP/shared-device linked accounts (2-hop), graph risk propagation (multi-hop, power-iteration on the user–IP–device graph with Euclidean-norm convergence) |
 
 The multi-hop case is the interesting one: in a chain `A—IP1—B—IP2—C`, user C shares
@@ -57,6 +58,12 @@ Detection is only half a fraud system; the business process is
   historical decision breaks every subsequent link; `GET /api/audit/verify` recomputes
   the whole chain and pinpoints the first broken record. HMAC — not plain SHA-256 —
   because a keyless hash chain can simply be recomputed after tampering.
+- **Dispute evidence export**: one click on an order assembles order facts, triggered
+  rules with explanations, the AI analysis, the human decision, and the order's audit-chain
+  records (with a whole-chain integrity attestation) into a print-ready document
+  (Print → Save as PDF) plus a machine-readable JSON — exactly what a merchant submits
+  when fighting a chargeback. This is the audit chain's second use case: proving to the
+  card network that the decision record is unaltered.
 
 ## AI second opinion — with an eval harness
 

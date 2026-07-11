@@ -4,6 +4,7 @@ import PrivateRoute     from './components/PrivateRoute';
 import LoginPage        from './pages/LoginPage';
 import DashboardPage    from './pages/DashboardPage';
 import OrderDetailPage  from './pages/OrderDetailPage';
+import DisputeEvidencePage from './pages/DisputeEvidencePage';
 import ReviewQueuePage  from './pages/ReviewQueuePage';
 import ReportsPage      from './pages/ReportsPage';
 import AuditPage        from './pages/AuditPage';
@@ -20,6 +21,7 @@ export default function App() {
           <Route element={<PrivateRoute />}>
             <Route path="/dashboard"       element={<DashboardPage />} />
             <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+            <Route path="/orders/:orderId/evidence" element={<DisputeEvidencePage />} />
             <Route path="/review"          element={<ReviewQueuePage />} />
             <Route path="/reports"         element={<ReportsPage />} />
             <Route path="/audit"           element={<AuditPage />} />

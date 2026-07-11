@@ -11,4 +11,6 @@ public interface ReviewAuditRepository extends JpaRepository<ReviewAuditRecord, 
     Optional<ReviewAuditRecord> findTopByOrderByIdDesc();
 
     List<ReviewAuditRecord> findAllByOrderByIdAsc();
+
+    List<ReviewAuditRecord> findByOrderIdOrderByIdAsc(String orderId);
 }

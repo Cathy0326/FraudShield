@@ -73,21 +73,32 @@ public class OrderSimulator {
             // 新账号大额（USER-TEST-001种子：账龄2小时）/ young account, high amount
             return order("USER-TEST-001", 120.0 + random.nextInt(200), pick(NORMAL_IPS));
         }
-        if (roll < 95) {
+        if (roll < 93) {
             // 金额异常（USER-TEST-002种子：历史均值50）/ amount spike vs historical mean
             return order("USER-TEST-002", 180.0 + random.nextInt(150), pick(NORMAL_IPS));
+        }
+        if (roll < 97) {
+            // 卡测试攻击：同IP+同设备（模拟器指纹）发小额单，每单换一个假身份
+            // Card-testing burst: one IP + one emulator device fingerprint probing
+            // stolen cards with micro-charges, each under a fresh fake identity
+            return order("USER-JD-" + random.nextInt(12), 0.5 + random.nextInt(9),
+                    "66.66.66.66", "DEV-EMU-666");
         }
         // 高频攻击突发：同一IP连续命中FrequentIpRule / velocity burst from one IP
         return order("USER-BURST-" + random.nextInt(2), 15.0 + random.nextInt(30), "77.77.77.77");
     }
 
     private Order order(String userId, double amount, String ip) {
+        return order(userId, amount, ip, pick(DEVICES));
+    }
+
+    private Order order(String userId, double amount, String ip, String deviceId) {
         return new Order(
                 "ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
                 userId,
                 Math.round(amount * 100.0) / 100.0,
                 ip,
-                pick(DEVICES),
+                deviceId,
                 LocalDateTime.now());
     }
 

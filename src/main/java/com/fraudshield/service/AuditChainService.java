@@ -119,6 +119,14 @@ public final class AuditChainService {
         return repository.findAllByOrderByIdAsc();
     }
 
+    /**
+     * 单笔订单在链上的所有环 —— 争议证据包的原材料
+     * Every chain link for one order — the raw material of a dispute evidence package.
+     */
+    public List<ReviewAuditRecord> getRecordsForOrder(String orderId) {
+        return repository.findByOrderIdOrderByIdAsc(orderId);
+    }
+
     // ── internals ────────────────────────────────────────────────────────────
 
     // 字段间用不可能出现在数据里的分隔符，防止字段拼接歧义（"a|bc" vs "a|b","c"）
