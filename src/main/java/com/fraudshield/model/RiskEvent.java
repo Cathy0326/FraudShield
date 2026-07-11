@@ -43,6 +43,15 @@ public class RiskEvent {
     @Convert(converter = com.fraudshield.crypto.EncryptedStringConverter.class)
     private String deviceId;
 
+    // 收货/账单地址是PII，与其他个人数据同等加密落库；确定性加密使等值查询仍可用
+    // Shipping/billing addresses are PII — encrypted at rest like the other personal
+    // fields; deterministic encryption keeps equality queries working
+    @Convert(converter = com.fraudshield.crypto.EncryptedStringConverter.class)
+    private String shippingAddress;
+
+    @Convert(converter = com.fraudshield.crypto.EncryptedStringConverter.class)
+    private String billingAddress;
+
     private Double amount;
 
     // 存储枚举名称字符串，方便SQL查询和未来迁移

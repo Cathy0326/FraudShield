@@ -47,10 +47,10 @@ class OrderEventProducerTest {
     }
 
     @Test
-    void sendTestOrders_sendsExactlyFiveMessages() {
+    void sendTestOrders_sendsExactlyEightMessages() {
         producer.sendTestOrders();
 
-        verify(kafkaTemplate, times(5)).send(anyString(), anyString(), any(Order.class));
+        verify(kafkaTemplate, times(8)).send(anyString(), anyString(), any(Order.class));
     }
 
     @Test
@@ -60,7 +60,7 @@ class OrderEventProducerTest {
         producer.sendTestOrders();
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
-        verify(kafkaTemplate, times(5)).send(anyString(), anyString(), captor.capture());
+        verify(kafkaTemplate, times(8)).send(anyString(), anyString(), captor.capture());
         var orders = captor.getAllValues();
 
         // 1. HighAmountNewUserRule needs amount > 100
@@ -77,5 +77,14 @@ class OrderEventProducerTest {
         for (int i : new int[] {0, 1, 2, 4}) {
             assertThat(orders.get(i).getIpAddress()).startsWith("192.0.2.");
         }
+
+        // 6-8. Drop-address cluster: 3 distinct identities → ONE shipping address,
+        // each with a different billing address (AVS mismatch) — trips AddressPatternRule
+        var mule = orders.subList(5, 8).stream()
+                .filter(o -> o.getUserId().startsWith("USER-MULE-")).toList();
+        assertThat(mule).hasSize(3);
+        assertThat(mule.stream().map(Order::getUserId).distinct().count()).isEqualTo(3);
+        assertThat(mule.stream().map(Order::getShippingAddress).distinct()).hasSize(1);
+        assertThat(mule).allMatch(o -> !o.getShippingAddress().equals(o.getBillingAddress()));
     }
 }

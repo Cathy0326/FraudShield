@@ -34,9 +34,13 @@ public class OrderEventProducer {
         log.info("Sent order {} to topic '{}'", order.getOrderId(), topic);
     }
 
+    // 代收点demo地址：三条测试订单共用，触发AddressPatternRule
+    // Shared drop-point address for the demo cluster that trips AddressPatternRule
+    private static final String DEMO_MULE_ADDRESS = "1 Reship Way, Newark NJ 07101";
+
     /**
-     * 发送5条测试订单，覆盖所有规则场景
-     * Sends 5 test orders that exercise every rule in the engine.
+     * 发送8条测试订单，覆盖所有规则场景
+     * Sends 8 test orders that exercise every rule in the engine.
      *
      * <p>IP和金额都做了随机化：早期版本用5个固定IP和固定金额，连点几次按钮后
      * 每个IP在5分钟窗口内都超过FrequentIpRule的限额，于是**所有**测试订单
@@ -49,6 +53,12 @@ public class OrderEventProducer {
      * HIGH, ruining the demo. Random IPs keep repeated clicks from piling up in the
      * sliding window; the blacklisted IP 10.0.0.1 stays fixed because BlacklistRule
      * must keep hitting it. Amounts jitter within each scenario's rule thresholds.
+     *
+     * <p>末尾3条是代收点场景：3个不同身份、不同IP、不同账单地址，但发往同一收货地址
+     * —— 一次点击即可命中AddressPatternRule（需≥3个不同身份发往同一地址）。
+     * The last 3 are a drop-address cluster: three distinct identities, IPs, and
+     * billing addresses all shipping to ONE address, so a single click trips
+     * AddressPatternRule (which needs >=3 identities to one address).
      */
     public void sendTestOrders() {
         List<Order> testOrders = List.of(
@@ -67,7 +77,11 @@ public class OrderEventProducer {
             // 5. NORMAL — no rule triggered (amount above card-testing probe range,
             //    below every amount threshold; fresh IP avoids the velocity window)
             new Order(uid(), "USER-NORMAL-2", 15.0 + random.nextInt(75), randomIp(),
-                    "DEV-5", LocalDateTime.now())
+                    "DEV-5", LocalDateTime.now()),
+            // 6-8. AddressPatternRule → HIGH: 3 identities → one drop address, billing differs
+            muleOrder("USER-MULE-A", "700 Cardholder Ave"),
+            muleOrder("USER-MULE-B", "820 Cardholder Ave"),
+            muleOrder("USER-MULE-C", "930 Cardholder Ave")
         );
 
         for (Order order : testOrders) {
@@ -82,6 +96,14 @@ public class OrderEventProducer {
 
     private String uid() {
         return "ORD-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    // 代收点订单：真实货物→高金额，独立IP，账单≠收货（AVS不符），收货地址共用
+    // Drop-point order: real goods → high amount, own IP, billing≠shipping (AVS
+    // mismatch), shared shipping address
+    private Order muleOrder(String userId, String billing) {
+        return new Order(uid(), userId, 150.0 + random.nextInt(600), randomIp(),
+                "DEV-MULE", LocalDateTime.now(), DEMO_MULE_ADDRESS, billing);
     }
 
     /**

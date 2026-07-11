@@ -146,6 +146,8 @@ export default function OrderDetailPage() {
                   ['Amount',     `$${event.amount?.toFixed(2)}`],
                   ['IP Address', event.ipAddress],
                   ['Device', event.deviceId ?? '—'],
+                  ['Ship To', event.shippingAddress ?? '—'],
+                  ['Bill To', event.billingAddress ?? '—'],
                   ['Detected',   event.detectedAt ? new Date(event.detectedAt).toLocaleString() : '—'],
                 ].map(([label, val]) => (
                   <div key={label}>
@@ -154,6 +156,14 @@ export default function OrderDetailPage() {
                   </div>
                 ))}
               </dl>
+              {/* AVS不符提示：账单地址≠收货地址是地址模式检测的辅助信号
+                  AVS mismatch cue — billing ≠ shipping, a secondary address-pattern signal */}
+              {event.shippingAddress && event.billingAddress &&
+                event.shippingAddress !== event.billingAddress && (
+                <p className="mt-4 text-xs text-amber-400 bg-amber-900/20 border border-amber-500/30 rounded-lg px-3 py-2">
+                  ⚠ Billing address differs from shipping address (AVS mismatch)
+                </p>
+              )}
             </div>
 
             {/* Risk Assessment Card */}

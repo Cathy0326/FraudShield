@@ -65,7 +65,8 @@ class OrderSimulatorTest {
         long youngAcct   = orders.stream().filter(o -> "USER-TEST-001".equals(o.getUserId())).count();
         long spike       = orders.stream().filter(o -> "USER-TEST-002".equals(o.getUserId())).count();
         long cardTest    = orders.stream().filter(o -> "66.66.66.66".equals(o.getIpAddress())).count();
-        long suspicious  = blacklistIp + burst + youngAcct + spike + cardTest;
+        long dropAddr    = orders.stream().filter(o -> o.getUserId().startsWith("USER-MULE-")).count();
+        long suspicious  = blacklistIp + burst + youngAcct + spike + cardTest + dropAddr;
 
         // 可疑订单约27%（突发场景一次3单推高了订单占比）；宽容差防偶发失败
         // ~27% of ORDERS are suspicious (the 3-at-once burst inflates its share);
@@ -78,6 +79,40 @@ class OrderSimulatorTest {
         assertThat(youngAcct).isPositive();
         assertThat(spike).isPositive();
         assertThat(cardTest).isPositive();
+        assertThat(dropAddr).isPositive();
+    }
+
+    @Test
+    void dropAddressScenario_manyIdentitiesShipToOneAddressWithBillingMismatch() {
+        // 代收点场景：多个假身份的订单发往同一收货地址，账单地址各不同（AVS不符）
+        // Drop-address scenario: many fake identities ship to one address, billing differs
+        List<Order> mule = sample(3000).stream()
+                .filter(o -> o.getUserId().startsWith("USER-MULE-"))
+                .collect(Collectors.toList());
+
+        assertThat(mule).isNotEmpty();
+        // 所有骡子订单发往同一个收货地址 / all ship to the single mule address
+        assertThat(mule.stream().map(Order::getShippingAddress).distinct()).hasSize(1);
+        // 出现多个不同假身份 —— 这正是AddressPatternRule要抓的 / multiple distinct identities
+        assertThat(mule.stream().map(Order::getUserId).distinct().count()).isGreaterThan(2);
+        // 账单地址≠收货地址（AVS不符）/ billing differs from shipping (AVS mismatch)
+        assertThat(mule).allMatch(o -> !o.getShippingAddress().equals(o.getBillingAddress()));
+    }
+
+    @Test
+    void normalOrders_carryStableAddressWithBillingEqualShipping() {
+        List<Order> normal = sample(1000).stream()
+                .filter(o -> o.getUserId().startsWith("USER-SIM-"))
+                .collect(Collectors.toList());
+
+        // 正常订单账单=收货，不制造AVS噪声 / normal orders: billing == shipping, no AVS noise
+        assertThat(normal).allMatch(o -> o.getShippingAddress() != null
+                && o.getShippingAddress().equals(o.getBillingAddress()));
+        // 每个用户地址稳定 / each user keeps one stable address
+        Map<String, List<Order>> perUser = normal.stream()
+                .collect(Collectors.groupingBy(Order::getUserId));
+        perUser.forEach((user, os) ->
+                assertThat(os.stream().map(Order::getShippingAddress).distinct()).hasSize(1));
     }
 
     @Test
