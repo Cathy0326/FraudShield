@@ -73,8 +73,13 @@ public class OrderSimulator {
     private static final double AMOUNT_SIGMA = 0.55;   // log-normal spread
     private static final long RATE_CYCLE_MS = 3_600_000; // 60-min traffic wave
 
-    /** 虚拟正常用户：固定的IP/设备/消费水平 / synthetic user with stable identity. */
-    record SimUser(String userId, String ip, String deviceId, double meanAmount) { }
+    // 转运骡子/代收点地址 —— 多个假身份的订单都发往这里，命中AddressPatternRule
+    // Reshipping-mule / drop-point address — many fake identities all ship here,
+    // tripping AddressPatternRule
+    private static final String MULE_ADDRESS = "1 Reship Way, Newark NJ 07101";
+
+    /** 虚拟正常用户：固定的IP/设备/地址/消费水平 / synthetic user with stable identity. */
+    record SimUser(String userId, String ip, String deviceId, String address, double meanAmount) { }
 
     private final OrderEventProducer producer;
     private final Random random = new Random();
@@ -97,6 +102,7 @@ public class OrderSimulator {
                     String.format("USER-SIM-%03d", i),
                     "203.0.113." + i,                      // TEST-NET-3, unique per user
                     String.format("DEV-SIM-%03d", i),
+                    (100 + i) + " Main St, Springfield",   // stable home address, unique per user
                     15.0 + hashToUnit(i) * 105.0));        // personal mean $15-$120
             cumulative += 1.0 / Math.pow(i + 1.0, ZIPF_EXPONENT);
             zipfCumulative[i] = cumulative;
@@ -118,8 +124,8 @@ public class OrderSimulator {
     }
 
     /**
-     * 流量构成 — 77%正常，其余按场景校准（速率注释按均值λ=0.9、每分钟约13.5个事件计算）
-     * Traffic mix: 77% normal, the rest calibrated per scenario (rate notes assume
+     * 流量构成 — 74%正常，其余按场景校准（速率注释按均值λ=0.9、每分钟约13.5个事件计算）
+     * Traffic mix: 74% normal, the rest calibrated per scenario (rate notes assume
      * the mean λ of 0.9 → ~13.5 events/min).
      */
     List<Order> nextOrders() {
@@ -160,13 +166,28 @@ public class OrderSimulator {
             }
             return burst;
         }
-        // 正常订单：Zipf选用户，对数正态金额，用户自带固定IP/设备
-        // Normal order: Zipf-picked user, log-normal amount, the user's own IP/device
+        if (roll < 26) {
+            // 代收点/转运骡子：不同假身份的订单发往同一收货地址，账单地址各不相同（AVS不符）
+            // 真实货物 → 金额偏高；不同IP，唯一交汇点是收货地址 → 命中AddressPatternRule
+            // Drop address / reshipping mule: orders under different fake identities all
+            // ship to one address with differing billing addresses (AVS mismatch). Real
+            // goods → higher amounts; different IPs, the only convergence is the shipping
+            // address → trips AddressPatternRule
+            String muleUser = "USER-MULE-" + random.nextInt(8);
+            return List.of(new Order(uid(), muleUser, 150.0 + random.nextInt(600),
+                    "45.45.45." + random.nextInt(200), "DEV-MULE-0" + random.nextInt(6),
+                    LocalDateTime.now(), MULE_ADDRESS,
+                    muleUser + " billing, " + random.nextInt(9000) + " Card Rd"));
+        }
+        // 正常订单：Zipf选用户，对数正态金额，用户自带固定IP/设备/地址，账单=收货
+        // Normal order: Zipf-picked user, log-normal amount, the user's own stable
+        // IP/device/address, billing == shipping (no AVS mismatch)
         SimUser user = pickZipfUser();
         double amount = clamp(user.meanAmount() * Math.exp(AMOUNT_SIGMA * random.nextGaussian()),
                 8.0, 400.0);
         return List.of(new Order(uid(), user.userId(), round2(amount),
-                user.ip(), user.deviceId(), LocalDateTime.now()));
+                user.ip(), user.deviceId(), LocalDateTime.now(),
+                user.address(), user.address()));
     }
 
     // ── NHPP internals ───────────────────────────────────────────────────────

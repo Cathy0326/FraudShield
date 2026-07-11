@@ -119,6 +119,8 @@ export default function DisputeEvidencePage() {
                   ['Amount',      event.amount != null ? `$${event.amount.toFixed(2)}` : '—'],
                   ['IP Address',  event.ipAddress],
                   ['Device ID',   event.deviceId || '—'],
+                  ['Ship To',     event.shippingAddress || '—'],
+                  ['Bill To',     event.billingAddress || '—'],
                   ['Detected At', fmt(event.detectedAt)],
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between border-b border-dotted border-slate-200 pb-1">

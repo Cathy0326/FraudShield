@@ -82,6 +82,8 @@ public class OrderEventConsumer {
                 .userId(order.getUserId())
                 .ipAddress(order.getIpAddress())
                 .deviceId(order.getDeviceId())
+                .shippingAddress(order.getShippingAddress())
+                .billingAddress(order.getBillingAddress())
                 .amount(order.getAmount())
                 .riskLevel(result.getRiskLevel().name())
                 .riskScore(result.getRiskScore())

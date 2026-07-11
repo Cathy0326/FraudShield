@@ -25,6 +25,7 @@ user and their IPs, (3) seeds graph risk propagation across the whole fraud ring
 | **Volume** | Clumsy fraud — too much, too fast | `FrequentIpRule` (velocity), `AbnormalAmountRule` (EMA deviation), `HighAmountNewUserRule` |
 | **Identity** | Repeat offenders | `BlacklistRule` (curated Redis sets), `ConfirmedFraudHistoryRule` (auto-generated from review labels — no manual sync) |
 | **Pattern** | Card testing ("John Doe" attacks) | `CardTestingRule` — micro-charges (≤$10) × many distinct identities × one IP/device in a 10-min Redis sliding window. Velocity rules miss this: the attacker slows down but can't hide the small-amount + multi-identity combination |
+| **Address** | Drop points / reshipping mules | `AddressPatternRule` — one shipping address used by ≥3 distinct identities in a 24-h window (goods converging on a mule), with billing≠shipping (AVS mismatch) as a reinforcing signal. Mirrors card testing's "many identities, one source", but the source is a physical address and it isn't amount-capped — mules receive real, high-value goods |
 | **Relationship** | Organized fraud rings | Shared-IP/shared-device linked accounts (2-hop), graph risk propagation (multi-hop, power-iteration on the user–IP–device graph with Euclidean-norm convergence) |
 
 The multi-hop case is the interesting one: in a chain `A—IP1—B—IP2—C`, user C shares
