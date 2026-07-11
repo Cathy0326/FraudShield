@@ -62,7 +62,8 @@ class OrderSimulatorTest {
         long burst       = orders.stream().filter(o -> "77.77.77.77".equals(o.getIpAddress())).count();
         long youngAcct   = orders.stream().filter(o -> "USER-TEST-001".equals(o.getUserId())).count();
         long spike       = orders.stream().filter(o -> "USER-TEST-002".equals(o.getUserId())).count();
-        long suspicious  = blacklistIp + burst + youngAcct + spike;
+        long cardTest    = orders.stream().filter(o -> "66.66.66.66".equals(o.getIpAddress())).count();
+        long suspicious  = blacklistIp + burst + youngAcct + spike + cardTest;
 
         // 可疑流量约30%：给宽容差防止偶发失败 / ~30% suspicious, generous tolerance
         assertThat(suspicious).isBetween(90L, 210L);
@@ -72,5 +73,6 @@ class OrderSimulatorTest {
         assertThat(burst).isPositive();
         assertThat(youngAcct).isPositive();
         assertThat(spike).isPositive();
+        assertThat(cardTest).isPositive();
     }
 }

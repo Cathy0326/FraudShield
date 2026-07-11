@@ -1,6 +1,7 @@
 package com.fraudshield.service;
 
 import com.fraudshield.dto.DashboardStatsDTO;
+import com.fraudshield.dto.DisputeEvidenceDTO;
 import com.fraudshield.dto.FinancialImpactDTO;
 import com.fraudshield.dto.HourlyStatDTO;
 import com.fraudshield.dto.RiskEventDTO;
@@ -255,6 +256,33 @@ public class RiskEventService {
         // Every decision is appended to the tamper-evident audit chain
         auditChain.append(orderId, decision, reviewer);
         return saved;
+    }
+
+    /**
+     * 争议证据包 — 把系统已有的数据组装成一份可提交的chargeback证据
+     * Dispute evidence package: assembles data the system already holds into
+     * one submittable chargeback exhibit. Zero new detection logic — the value
+     * is in the packaging, and it gives the audit chain its second use case
+     * (attesting to card networks that the decision record is unaltered).
+     *
+     * @param requestedBy taken from the authenticated principal — the evidence
+     *                    header records who generated the package
+     */
+    public DisputeEvidenceDTO getDisputeEvidence(String orderId, String requestedBy) {
+        RiskEvent event = repository.findByOrderId(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Risk event not found for orderId: " + orderId));
+
+        Map<String, Object> chainStatus = auditChain.verifyChain();
+
+        return DisputeEvidenceDTO.builder()
+                .generatedAt(LocalDateTime.now())
+                .generatedBy(requestedBy)
+                .event(RiskEventDTO.fromEntity(event))
+                .auditTrail(auditChain.getRecordsForOrder(orderId))
+                .chainValid(Boolean.TRUE.equals(chainStatus.get("valid")))
+                .chainRecordCount(((Number) chainStatus.getOrDefault("records", 0)).longValue())
+                .build();
     }
 
     /**

@@ -1,8 +1,10 @@
 package com.fraudshield.service;
 
 import com.fraudshield.dto.DashboardStatsDTO;
+import com.fraudshield.dto.DisputeEvidenceDTO;
 import com.fraudshield.dto.RiskEventDTO;
 import com.fraudshield.exception.ResourceNotFoundException;
+import com.fraudshield.model.ReviewAuditRecord;
 import com.fraudshield.model.RiskEvent;
 import com.fraudshield.repository.RiskEventRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +17,7 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -250,6 +253,52 @@ class RiskEventServiceTest {
         when(repository.findByOrderId("NOPE")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.reviewEvent("NOPE", "APPROVED", "admin", null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getDisputeEvidence_assemblesEventAuditTrailAndChainStatus() {
+        event1.setReviewStatus("CONFIRMED_FRAUD");
+        event1.setReviewedBy("admin");
+        when(repository.findByOrderId("ORD-001")).thenReturn(Optional.of(event1));
+        ReviewAuditRecord link = ReviewAuditRecord.builder()
+                .id(7L).orderId("ORD-001").decision("CONFIRMED_FRAUD").reviewer("admin")
+                .decidedAt(LocalDateTime.now()).prevHash("aa".repeat(32)).recordHash("bb".repeat(32))
+                .build();
+        when(auditChain.getRecordsForOrder("ORD-001")).thenReturn(List.of(link));
+        when(auditChain.verifyChain()).thenReturn(Map.of("valid", true, "records", 12));
+
+        DisputeEvidenceDTO evidence = service.getDisputeEvidence("ORD-001", "admin");
+
+        assertThat(evidence.getGeneratedBy()).isEqualTo("admin");
+        assertThat(evidence.getGeneratedAt()).isNotNull();
+        assertThat(evidence.getEvent().getOrderId()).isEqualTo("ORD-001");
+        assertThat(evidence.getEvent().getReviewStatus()).isEqualTo("CONFIRMED_FRAUD");
+        assertThat(evidence.getAuditTrail()).containsExactly(link);
+        assertThat(evidence.isChainValid()).isTrue();
+        assertThat(evidence.getChainRecordCount()).isEqualTo(12);
+    }
+
+    @Test
+    void getDisputeEvidence_brokenChain_isReportedNotHidden() {
+        // 链断了也要出包 —— 但完整性状态必须如实标注，绝不能假装链是好的
+        // A broken chain still yields a package, but the integrity flag must say so
+        when(repository.findByOrderId("ORD-001")).thenReturn(Optional.of(event1));
+        when(auditChain.getRecordsForOrder("ORD-001")).thenReturn(List.of());
+        when(auditChain.verifyChain()).thenReturn(
+                Map.of("valid", false, "records", 12, "firstBrokenIndex", 3));
+
+        DisputeEvidenceDTO evidence = service.getDisputeEvidence("ORD-001", "admin");
+
+        assertThat(evidence.isChainValid()).isFalse();
+        assertThat(evidence.getAuditTrail()).isEmpty();
+    }
+
+    @Test
+    void getDisputeEvidence_unknownOrder_throwsNotFound() {
+        when(repository.findByOrderId("NOPE")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getDisputeEvidence("NOPE", "admin"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 

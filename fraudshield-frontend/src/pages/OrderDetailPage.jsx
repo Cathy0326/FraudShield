@@ -69,12 +69,24 @@ export default function OrderDetailPage() {
     <div className="min-h-screen bg-dark-bg">
       <NavBar />
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
-        >
-          ← Back to Dashboard
-        </button>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+          >
+            ← Back to Dashboard
+          </button>
+          {/* 争议证据包：订单+判定+审核+审计链哈希一键成文档，打chargeback官司用
+              Dispute evidence: order + verdict + review + chain hashes as one document */}
+          {event && (
+            <button
+              onClick={() => navigate(`/orders/${orderId}/evidence`)}
+              className="text-sm px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            >
+              📄 Export Dispute Evidence
+            </button>
+          )}
+        </div>
 
         {loading ? <LoadingSpinner /> : error ? (
           <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">{error}</div>
