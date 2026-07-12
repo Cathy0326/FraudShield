@@ -85,7 +85,7 @@ export default function AuditPage() {
   const shortHash = (h) => (h ? `${h.slice(0, 8)}…${h.slice(-6)}` : '—');
 
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen">
       <NavBar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -110,13 +110,13 @@ export default function AuditPage() {
         {/* 完整性状态 — 页面加载即出结论 / integrity verdict, shown from page load */}
         {verdict && (
           verdict.valid ? (
-            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-green-300">
+            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-300">
               ✅ Chain verified intact — all {verdict.records} record{verdict.records === 1 ? '' : 's'} check out
               {verdict.keyed ? ' (HMAC-keyed)' : ' (unkeyed SHA-256 mode)'}. Evidence packages
               generated from these records carry a valid integrity attestation.
             </div>
           ) : (
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300">
+            <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300">
               ❌ TAMPERING DETECTED — chain breaks at record #{verdict.brokenRecordId}
               {' '}(position {verdict.firstBrokenIndex + 1} of {verdict.records}).
               This record or one before it was modified or deleted after being written.
@@ -126,22 +126,24 @@ export default function AuditPage() {
         )}
 
         {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">{error}</div>
+          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300">{error}</div>
         )}
 
         {/* 决定统计 / decision stats */}
         {!loading && records.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             {[
-              ['Decisions',       stats.total,     'border-dark-border',   'text-white'],
-              ['Confirmed Fraud', stats.fraud,     'border-red-500/30',    'text-red-300'],
-              ['False Positives', stats.falsePos,  'border-slate-500/30',  'text-slate-300'],
-              ['Approved',        stats.approved,  'border-green-500/30',  'text-green-300'],
-              ['Reviewers',       stats.reviewers, 'border-indigo-500/30', 'text-indigo-300'],
-            ].map(([label, value, border, color]) => (
-              <div key={label} className={`bg-dark-card border ${border} rounded-xl p-4`}>
+              ['Decisions',       stats.total,     '#818cf8', 'text-white'],
+              ['Confirmed Fraud', stats.fraud,     '#f43f5e', 'text-rose-300'],
+              ['False Positives', stats.falsePos,  '#64748b', 'text-slate-300'],
+              ['Approved',        stats.approved,  '#34d399', 'text-emerald-300'],
+              ['Reviewers',       stats.reviewers, '#a78bfa', 'text-violet-300'],
+            ].map(([label, value, accent, color]) => (
+              <div key={label}
+                   className="rise-in relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-dark-card to-[#141d30] shadow-lg shadow-black/20 p-4 transition-all duration-200 hover:-translate-y-0.5">
+                <span className="absolute left-0 top-0 h-full w-1" style={{ background: accent }} />
                 <p className="text-xs text-slate-400">{label}</p>
-                <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
+                <p className={`text-2xl font-bold mt-1 tabular-nums ${color}`}>{value}</p>
               </div>
             ))}
           </div>
@@ -149,19 +151,19 @@ export default function AuditPage() {
 
         {/* 搜索 + 决定类型筛选 / search + decision filter */}
         {!loading && records.length > 0 && (
-          <div className="bg-dark-card border border-dark-border rounded-xl p-4 flex flex-wrap items-center gap-3">
+          <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl p-4 flex flex-wrap items-center gap-3">
             <input
               type="search"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search order ID or reviewer…"
-              className="flex-1 min-w-[220px] bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 min-w-[220px] bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <select
               value={decisionFilter}
               onChange={e => setDecisionFilter(e.target.value)}
               style={{ colorScheme: 'dark' }}
-              className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="ALL">All decisions</option>
               <option value="CONFIRMED_FRAUD">Confirmed fraud</option>
@@ -172,7 +174,7 @@ export default function AuditPage() {
               <>
                 <button
                   onClick={() => { setSearch(''); setDecisionFilter('ALL'); }}
-                  className="text-sm px-3 py-2 text-slate-400 hover:text-white border border-dark-border rounded-lg transition-colors"
+                  className="text-sm px-3 py-2 text-slate-400 hover:text-white border border-white/10 rounded-lg transition-colors"
                 >
                   ✕ Clear
                 </button>
@@ -185,7 +187,7 @@ export default function AuditPage() {
         )}
 
         {loading ? <LoadingSpinner /> : (
-          <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+          <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl overflow-hidden">
             {records.length === 0 ? (
               <p className="text-slate-500 text-sm text-center py-12">
                 No decisions recorded yet — the chain starts with the first review decision.
@@ -204,15 +206,15 @@ export default function AuditPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-dark-border text-slate-400 text-xs uppercase tracking-wide">
+                    <tr className="border-b border-white/5 text-slate-500 text-xs uppercase tracking-wider">
                       {['#', 'Decided At', 'Order ID', 'Decision', 'Reviewer', 'Record Hash', ''].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left font-medium">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-dark-border">
+                  <tbody className="divide-y divide-white/5">
                     {filtered.map(r => (
-                      <tr key={r.id} className="hover:bg-dark-bg/40 transition-colors">
+                      <tr key={r.id} className="hover:bg-white/[0.03] transition-colors">
                         <td className="px-4 py-3 text-slate-500">{r.id}</td>
                         <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                           {r.decidedAt ? new Date(r.decidedAt).toLocaleString() : '—'}

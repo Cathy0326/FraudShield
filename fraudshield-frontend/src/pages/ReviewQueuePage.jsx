@@ -96,7 +96,7 @@ export default function ReviewQueuePage() {
   }, [queue, search, riskFilter, ruleFilter, amountFilter]);
 
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen">
       <NavBar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
@@ -113,7 +113,7 @@ export default function ReviewQueuePage() {
         </div>
 
         {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 flex items-center justify-between">
+          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 flex items-center justify-between">
             <span>{error}</span>
             <button onClick={fetchQueue} className="text-sm underline">Retry</button>
           </div>
@@ -121,20 +121,20 @@ export default function ReviewQueuePage() {
 
         {/* 搜索 + 多维筛选栏 / search + multi-dimension filter bar */}
         {!loading && queue.length > 0 && (
-          <div className="bg-dark-card border border-dark-border rounded-xl p-4">
+          <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl p-4">
             <div className="flex flex-wrap items-center gap-3">
               <input
                 type="search"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search order ID, user, IP, device…"
-                className="flex-1 min-w-[220px] bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="flex-1 min-w-[220px] bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
               <select
                 value={riskFilter}
                 onChange={e => setRiskFilter(e.target.value)}
                 style={{ colorScheme: 'dark' }}
-                className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="ALL">All risk levels</option>
                 <option value="HIGH">HIGH</option>
@@ -145,7 +145,7 @@ export default function ReviewQueuePage() {
                 value={ruleFilter}
                 onChange={e => setRuleFilter(e.target.value)}
                 style={{ colorScheme: 'dark' }}
-                className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="ALL">All rules</option>
                 {ruleOptions.map(r => <option key={r} value={r}>{r}</option>)}
@@ -154,7 +154,7 @@ export default function ReviewQueuePage() {
                 value={amountFilter}
                 onChange={e => setAmountFilter(e.target.value)}
                 style={{ colorScheme: 'dark' }}
-                className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {Object.entries(AMOUNT_BRACKETS).map(([key, b]) => (
                   <option key={key} value={key}>{b.label}</option>
@@ -163,7 +163,7 @@ export default function ReviewQueuePage() {
               {filtersActive && (
                 <button
                   onClick={clearFilters}
-                  className="text-sm px-3 py-2 text-slate-400 hover:text-white border border-dark-border rounded-lg transition-colors"
+                  className="text-sm px-3 py-2 text-slate-400 hover:text-white border border-white/10 rounded-lg transition-colors"
                 >
                   ✕ Clear
                 </button>
@@ -183,7 +183,7 @@ export default function ReviewQueuePage() {
         )}
 
         {loading ? <LoadingSpinner /> : (
-          <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
+          <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl overflow-hidden">
             {queue.length === 0 ? (
               <p className="text-slate-500 text-sm text-center py-12">
                 Queue is clear — no orders awaiting review. 🎉
@@ -201,19 +201,19 @@ export default function ReviewQueuePage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-dark-border text-slate-400 text-xs uppercase tracking-wide">
+                    <tr className="border-b border-white/5 text-slate-500 text-xs uppercase tracking-wider">
                       {['Priority', 'Detected', 'Order ID', 'User', 'Amount', 'Risk', 'Rules', ''].map((h, i) => (
                         <th key={i} className="px-4 py-3 text-left font-medium">{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-dark-border">
+                  <tbody className="divide-y divide-white/5">
                     {filtered.map((e, idx) => (
                       <tr
                         key={e.id}
                         onClick={() => navigate(`/orders/${e.orderId}`)}
                         className={`cursor-pointer transition-colors ${
-                          idx < 3 ? 'bg-red-900/10 hover:bg-red-900/20' : 'hover:bg-dark-bg/50'
+                          idx < 3 ? 'bg-red-900/10 hover:bg-red-900/20' : 'hover:bg-white/[0.03]'
                         }`}
                       >
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -227,7 +227,7 @@ export default function ReviewQueuePage() {
                         <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
                           {e.detectedAt ? new Date(e.detectedAt).toLocaleString() : '—'}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-300">{e.orderId}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-indigo-300">{e.orderId}</td>
                         <td className="px-4 py-3 text-slate-300">{e.userId}</td>
                         <td className="px-4 py-3 text-slate-300">${e.amount?.toFixed(2)}</td>
                         <td className="px-4 py-3"><RiskBadge riskLevel={e.riskLevel} /></td>
