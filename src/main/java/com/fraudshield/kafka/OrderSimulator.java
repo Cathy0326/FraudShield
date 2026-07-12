@@ -78,6 +78,24 @@ public class OrderSimulator {
     // tripping AddressPatternRule
     private static final String MULE_ADDRESS = "1 Reship Way, Newark NJ 07101";
 
+    // 黑名单IP池：轮换避免任一IP在FrequentIpRule窗口里堆积 —— 黑名单命中不该顺带
+    // 刷成velocity。三个都由DataInitializer种入blacklist:ips。
+    // Blacklisted-IP pool: rotate so no single one accumulates in FrequentIpRule's
+    // window — a blacklist hit shouldn't incidentally also trip velocity. All three
+    // are seeded into blacklist:ips by DataInitializer.
+    private static final List<String> BLACKLIST_IPS =
+            List.of("10.0.0.1", "10.0.0.2", "10.0.0.3");
+
+    // 金额异常场景的用户池：都由DataInitializer种子化为"老账号 + 低历史均值($50)"。
+    // 老账号 → 不误触HighAmountNewUserRule；低均值 → 尖峰命中AbnormalAmountRule。
+    // 轮换让每个用户下单稀疏，EMA不会很快追平尖峰，规则持续可见。
+    // Amount-spike user pool: each seeded by DataInitializer as an OLD account with a
+    // low historical average ($50). Old account → won't mis-trip HighAmountNewUserRule;
+    // low average → spikes trip AbnormalAmountRule. Rotating keeps each user's orders
+    // sparse so its EMA doesn't quickly catch up to the spikes and stop firing.
+    private static final List<String> SPIKE_USERS = List.of(
+            "USER-TEST-002", "USER-SPIKE-1", "USER-SPIKE-2", "USER-SPIKE-3", "USER-SPIKE-4");
+
     /** 虚拟正常用户：固定的IP/设备/地址/消费水平 / synthetic user with stable identity. */
     record SimUser(String userId, String ip, String deviceId, String address, double meanAmount) { }
 
@@ -131,22 +149,25 @@ public class OrderSimulator {
     List<Order> nextOrders() {
         int roll = random.nextInt(100);
         if (roll < 8) {
-            // 黑名单IP命中（DataInitializer种子：10.0.0.1）/ blacklisted IP seed
+            // 黑名单命中：金额低于100不触发新账号规则；IP从黑名单池轮换防velocity堆积
+            // Blacklist hit: amount <100 so it won't touch the new-user rule; IP rotates
+            // across the blacklist pool so BlacklistRule fires without piling up velocity
             return List.of(order("USER-DRIFTER-" + random.nextInt(3),
-                    20.0 + random.nextInt(60), "10.0.0.1"));
+                    20.0 + random.nextInt(60), pick(BLACKLIST_IPS)));
         }
         if (roll < 12) {
-            // 新账号大额；专属IP，4% → ~0.5单/分 → 窗口内~2.7单，不误触频率规则
-            // Young account, high amount; own IP at 4% → ~2.7 orders/window, below
-            // the velocity limit so it demos ITS rule, not FrequentIpRule
+            // 新账号大额（USER-TEST-001种子：账龄2小时）；IP轮换 → 只亮HighAmountNewUserRule
+            // Young account, high amount (USER-TEST-001 seeded 2h old); rotating IP so it
+            // lights ONLY HighAmountNewUserRule, never velocity
             return List.of(order("USER-TEST-001", 120.0 + random.nextInt(200),
-                    "203.0.113.201"));
+                    rotatingAttackIp()));
         }
         if (roll < 16) {
-            // 金额异常（USER-TEST-002种子：历史均值50）；同样专属IP防交叉触发
-            // Amount spike vs historical mean; own IP for the same cross-fire reason
-            return List.of(order("USER-TEST-002", 180.0 + random.nextInt(150),
-                    "203.0.113.202"));
+            // 金额异常：从种子化的老账号池轮换选用户，IP轮换 → 只亮AbnormalAmountRule
+            // Amount spike: rotate over the seeded old-account pool and rotate the IP,
+            // so it lights ONLY AbnormalAmountRule (not new-user, not velocity)
+            return List.of(order(pick(SPIKE_USERS), 180.0 + random.nextInt(150),
+                    rotatingAttackIp()));
         }
         if (roll < 20) {
             // 卡测试攻击：同IP+同设备发小额单，每单换假身份；4% → 10分钟窗口~5.4单 ≥4阈值
@@ -244,6 +265,21 @@ public class OrderSimulator {
 
     private Order order(String userId, double amount, String ip, String deviceId) {
         return new Order(uid(), userId, round2(amount), ip, deviceId, LocalDateTime.now());
+    }
+
+    /**
+     * 轮换攻击IP（TEST-NET-2，198.51.100.10–249）。金额类场景的规则与IP无关 ——
+     * 摊到240个地址后，任一IP的命中率都远低于FrequentIpRule阈值，杜绝velocity交叉误触。
+     * Rotating attack IP from TEST-NET-2 (198.51.100.10–249). The amount-based
+     * scenarios' rules don't depend on IP, so spreading across 240 addresses keeps
+     * every IP far below FrequentIpRule's threshold — no velocity cross-fire.
+     */
+    private String rotatingAttackIp() {
+        return "198.51.100." + (10 + random.nextInt(240));
+    }
+
+    private String pick(List<String> pool) {
+        return pool.get(random.nextInt(pool.size()));
     }
 
     private String uid() {
