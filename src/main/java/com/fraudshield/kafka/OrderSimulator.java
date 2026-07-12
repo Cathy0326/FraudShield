@@ -165,9 +165,21 @@ public class OrderSimulator {
         if (roll < 16) {
             // 金额异常：从种子化的老账号池轮换选用户，IP轮换 → 只亮AbnormalAmountRule
             // Amount spike: rotate over the seeded old-account pool and rotate the IP,
-            // so it lights ONLY AbnormalAmountRule (not new-user, not velocity)
-            return List.of(order(pick(SPIKE_USERS), 180.0 + random.nextInt(150),
-                    rotatingAttackIp()));
+            // so it lights ONLY AbnormalAmountRule (not new-user, not velocity).
+            //
+            // 关键：这些用户大多数下单贴着$50基线，只有约1/3是真正的尖峰。低额单不断把EMA
+            // 拉回基线，尖峰才能持续>3x均值。若每单都是高额，EMA几单内就追平尖峰、规则熄火——
+            // 这正是之前的毛病。
+            // Key: these users MOSTLY order near their $50 baseline; only ~1/3 are real
+            // spikes. The frequent low orders keep pulling the EMA back down to baseline,
+            // so a spike stays above 3x the average. If every order were high, the EMA
+            // would catch up within a few orders and the rule would go silent — which is
+            // exactly the wrinkle this fixes.
+            boolean spike = random.nextInt(3) == 0;
+            double amount = spike
+                    ? 200.0 + random.nextInt(160)   // >3x $50 → trips AbnormalAmountRule
+                    : 35.0 + random.nextInt(35);     // ~baseline, holds the EMA down
+            return List.of(order(pick(SPIKE_USERS), amount, rotatingAttackIp()));
         }
         if (roll < 20) {
             // 卡测试攻击：同IP+同设备发小额单，每单换假身份；4% → 10分钟窗口~5.4单 ≥4阈值

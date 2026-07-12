@@ -70,6 +70,18 @@ public class DataInitializer implements CommandLineRunner {
                 redisTemplate.opsForValue().set("user:avg_amount:" + spikeUser, "50.0");
             }
 
+            // 转运骡子账号：种为老账号（10天）。代收点订单金额偏高(150-750)，若这些用户未
+            // 种子化会被HighAmountNewUserRule当成新账号而误触——于是每单同时亮"高额新用户"和
+            // "地址模式"两条规则。种成老账号后，代收场景只命中它该命中的AddressPatternRule。
+            // Reshipping-mule accounts: seed as established (10 days old). Drop-point orders
+            // carry high amounts (150-750); left unseeded, these users read as new accounts
+            // and HighAmountNewUserRule mis-fires, so every mule order lit BOTH that rule and
+            // AddressPatternRule. Seeding them old leaves the mule scenario tripping only the
+            // AddressPatternRule it's meant to.
+            for (int i = 0; i < 8; i++) {
+                redisTemplate.opsForValue().set("user:created:USER-MULE-" + i, String.valueOf(tenDaysAgo));
+            }
+
             // 黑名单测试数据：IP池轮换（见OrderSimulator）/ Blacklist seeds: IP pool (rotated; see OrderSimulator)
             redisTemplate.opsForSet().add("blacklist:ips",   "10.0.0.1", "10.0.0.2", "10.0.0.3");
             redisTemplate.opsForSet().add("blacklist:users", "USER-BAD-001");
