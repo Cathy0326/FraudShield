@@ -103,7 +103,16 @@ public class RiskEventService {
         // Normal orders are counted in Redis — not persisted, so not in DB
         long normal = parseRedisLong(NORMAL_COUNTER_KEY);
 
-        double riskRate = total == 0 ? 0.0 : (high + medium) * 100.0 / total;
+        // 风险率 = 高危+中危 占**全部已处理订单**（含正常单）的比例。分母必须含normal：
+        // 正常单不落库，若分母只用high+medium+low，风险率会虚高到近100% —— 与右侧
+        // "NORMAL 98%"分布饼图直接矛盾（15957单处理、Risk Rate却显示100%就是这个bug）。
+        // Risk rate = (HIGH+MEDIUM) as a share of ALL processed orders, normal included.
+        // The denominator must include normal: normal orders aren't persisted, so
+        // dividing by only high+medium+low inflates the rate toward 100% and
+        // contradicts the "NORMAL 98%" pie beside it (the "15957 processed yet Risk
+        // Rate 100%" bug).
+        long processed = total + normal;
+        double riskRate = processed == 0 ? 0.0 : (high + medium) * 100.0 / processed;
 
         // 规则命中次数：遍历所有记录的triggeredRules字段统计
         // Rule hit counts: parse the triggeredRules CSV field across all stored events

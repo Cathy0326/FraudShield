@@ -95,9 +95,31 @@ class RiskEventServiceTest {
 
         assertThat(stats.getTotalOrders()).isEqualTo(3L);   // 2 HIGH + 1 MEDIUM
         assertThat(stats.getNormalCount()).isEqualTo(5L);
+        // 风险率分母含正常单：(2+1) / (2+1+0+5) = 37.5%，而非旧口径的100%
+        // Risk rate denominator includes normal: (2+1)/(3+5) = 37.5%, not the old 100%
+        assertThat(stats.getRiskRate()).isEqualTo(37.5);
         assertThat(stats.getRuleHitCounts()).containsEntry("BlacklistRule", 1L);
         assertThat(stats.getRuleHitCounts()).containsEntry("HighAmountNewUserRule", 1L);
         assertThat(stats.getRuleHitCounts()).containsEntry("FrequentIpRule", 1L);
+    }
+
+    @Test
+    void getDashboardStats_riskRateCountsNormalOrdersInDenominator() {
+        // 回归：上千正常单 + 少量风险单时，风险率应贴近0，绝不能因正常单不落库而显示100%
+        // Regression: thousands of normal orders + a few risky ones → rate near 0,
+        // never 100% just because normal orders aren't persisted to the DB
+        when(repository.countByRiskLevel("HIGH")).thenReturn(222L);
+        when(repository.countByRiskLevel("MEDIUM")).thenReturn(32L);
+        when(repository.countByRiskLevel("LOW")).thenReturn(0L);
+        when(repository.findAll()).thenReturn(List.of());
+        when(repository.findByDetectedAtBetween(any(), any())).thenReturn(List.of());
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("counter:normal_orders")).thenReturn("15703"); // 15957 total processed
+
+        DashboardStatsDTO stats = service.getDashboardStats();
+
+        // (222+32) / (222+32+0+15703) = 254/15957 ≈ 1.59%
+        assertThat(stats.getRiskRate()).isEqualTo(1.59);
     }
 
     @Test
