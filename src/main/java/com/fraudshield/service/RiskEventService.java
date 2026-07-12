@@ -338,12 +338,30 @@ public class RiskEventService {
      */
     public List<RulePrecisionDTO> getRulePrecision() {
         Map<String, long[]> byRule = new HashMap<>(); // [totalHits, confirmed, falsePos, approved]
+        // 周环比：按reviewedAt落入哪个7天窗口分别累计 [confirmed, reviewed]
+        // Week-over-week: bucket each reviewed hit by which 7-day window its reviewedAt
+        // falls in — [confirmed, reviewed] for the current week and the prior week
+        Map<String, long[]> curWindow   = new HashMap<>(); // [confirmed, reviewed]
+        Map<String, long[]> priorWindow = new HashMap<>();
+        LocalDateTime now      = LocalDateTime.now();
+        LocalDateTime weekAgo  = now.minusDays(7);
+        LocalDateTime twoWeeks = now.minusDays(14);
 
         for (RiskEvent e : repository.findAll()) {
             if (e.getTriggeredRules() == null || e.getTriggeredRules().isBlank()) {
                 continue;
             }
             String status = e.getReviewStatus();
+            boolean confirmed = "CONFIRMED_FRAUD".equals(status);
+            boolean reviewed  = confirmed || "FALSE_POSITIVE".equals(status) || "APPROVED".equals(status);
+            LocalDateTime rAt = e.getReviewedAt();
+            // 已审核但缺reviewedAt（历史数据）→ 计入总量但不参与趋势，避免污染窗口
+            // Reviewed but no reviewedAt (legacy rows) → counts in totals, but sits out
+            // of the trend so it can't pollute either window
+            Map<String, long[]> window = !reviewed || rAt == null ? null
+                    : rAt.isAfter(weekAgo)  ? curWindow
+                    : rAt.isAfter(twoWeeks) ? priorWindow
+                    : null;
             for (String raw : e.getTriggeredRules().split(",")) {
                 String rule = raw.trim();
                 if (rule.isEmpty()) {
@@ -351,12 +369,19 @@ public class RiskEventService {
                 }
                 long[] counts = byRule.computeIfAbsent(rule, r -> new long[4]);
                 counts[0]++;
-                if ("CONFIRMED_FRAUD".equals(status)) {
+                if (confirmed) {
                     counts[1]++;
                 } else if ("FALSE_POSITIVE".equals(status)) {
                     counts[2]++;
                 } else if ("APPROVED".equals(status)) {
                     counts[3]++;
+                }
+                if (window != null) {
+                    long[] w = window.computeIfAbsent(rule, r -> new long[2]);
+                    if (confirmed) {
+                        w[0]++;
+                    }
+                    w[1]++;
                 }
             }
         }
@@ -375,6 +400,8 @@ public class RiskEventService {
                             .falsePositive(c[2])
                             .approved(c[3])
                             .precision(precision)
+                            .precisionDelta(precisionDelta(
+                                    curWindow.get(entry.getKey()), priorWindow.get(entry.getKey())))
                             .build();
                 })
                 // 误报最多的排前面 —— 这是ops最需要看到的 / worst offenders first
@@ -382,6 +409,21 @@ public class RiskEventService {
                         (RulePrecisionDTO d) -> d.getFalsePositive() + d.getApproved()).reversed()
                         .thenComparing(RulePrecisionDTO::getRule))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 两个7天窗口的precision差（百分点，正=改善）。任一窗口无已审核命中→null。
+     * Precision delta in percentage points between the current and prior 7-day windows
+     * (positive = improving). Null unless BOTH windows have at least one reviewed hit —
+     * a trend needs two comparable points.
+     */
+    private static Double precisionDelta(long[] cur, long[] prior) {
+        if (cur == null || prior == null || cur[1] == 0 || prior[1] == 0) {
+            return null;
+        }
+        double curPct   = cur[0]   * 100.0 / cur[1];
+        double priorPct = prior[0] * 100.0 / prior[1];
+        return Math.round((curPct - priorPct) * 100.0) / 100.0;
     }
 
     /**
