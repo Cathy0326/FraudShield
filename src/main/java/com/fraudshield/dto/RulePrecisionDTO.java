@@ -22,4 +22,11 @@ public class RulePrecisionDTO {
     private long falsePositive;
     private long approved;
     private Double precision;      // null until at least one hit is reviewed
+
+    // 周环比精度变化（百分点）：最近7天审核 vs 之前7天审核的precision差。
+    // 正=在改善，负=在变差。任一窗口无已审核命中时为null（无法诚实比较）。
+    // Week-over-week precision change in percentage points: precision of reviews in
+    // the last 7 days minus the prior 7 days. Positive = improving, negative = worse.
+    // Null when either window has no reviewed hits — no honest comparison to draw.
+    private Double precisionDelta;
 }

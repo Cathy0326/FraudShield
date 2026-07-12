@@ -64,6 +64,28 @@ function gradeRule(r) {
   };
 }
 
+// 精度周环比箭头 —— precision"涨"是好事：↑绿 ↓红（与风险KPI相反）。
+// 阈值±0.5pt内视为持平，避免噪声抖动。null=两个窗口凑不齐可比数据。
+// Week-over-week precision arrow. For precision, up is GOOD: green up, red down
+// (opposite to risk KPIs). Within ±0.5pt reads as flat to avoid noisy flicker.
+// null = not enough data in both windows to draw a trend.
+function TrendArrow({ delta }) {
+  if (delta == null) {
+    return <span className="ml-auto mb-1 text-[11px] text-slate-600" title="Need reviewed hits in both weeks">no trend</span>;
+  }
+  const flat = Math.abs(delta) < 0.5;
+  const up = delta > 0;
+  const c = flat ? '#64748b' : up ? '#34d399' : '#f43f5e';
+  const glyph = flat ? '→' : up ? '▲' : '▼';
+  return (
+    <span className="ml-auto mb-1 inline-flex items-center gap-1 text-[11px] font-semibold tabular-nums"
+          style={{ color: c }} title="Precision change vs the prior 7 days">
+      {glyph} {flat ? '0' : `${Math.abs(delta).toFixed(1)}`} pts
+      <span className="text-slate-600 font-normal">WoW</span>
+    </span>
+  );
+}
+
 function RuleHealthCard({ r }) {
   const g = gradeRule(r);
   const pct = r.precision;
@@ -85,6 +107,7 @@ function RuleHealthCard({ r }) {
           {pct == null ? '—' : `${pct.toFixed(0)}%`}
         </span>
         <span className="text-xs text-slate-500 mb-1">precision</span>
+        <TrendArrow delta={r.precisionDelta} />
       </div>
       <div className="mt-2 h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
         <div className="h-full rounded-full transition-all"
