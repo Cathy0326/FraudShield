@@ -76,6 +76,9 @@ export const getFinancialImpact = () =>
 export const getRulePrecision = () =>
   api.get('/api/risk-events/rule-precision').then((r) => r.data);
 
+export const getRuleHeatmap = (hours = 24) =>
+  api.get(`/api/risk-events/rule-heatmap?hours=${hours}`).then((r) => r.data);
+
 export const getDisputeEvidence = (orderId) =>
   api.get(`/api/risk-events/${orderId}/dispute-evidence`).then((r) => r.data);
 

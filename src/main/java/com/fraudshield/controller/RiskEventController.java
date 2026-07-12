@@ -5,6 +5,7 @@ import com.fraudshield.dto.DisputeEvidenceDTO;
 import com.fraudshield.dto.FinancialImpactDTO;
 import com.fraudshield.dto.GraphRiskScoreDTO;
 import com.fraudshield.dto.RiskEventDTO;
+import com.fraudshield.dto.RuleHeatmapDTO;
 import com.fraudshield.dto.RulePrecisionDTO;
 import com.fraudshield.dto.UserRiskProfileDTO;
 import com.fraudshield.service.GraphRiskService;
@@ -115,6 +116,13 @@ public class RiskEventController {
     @GetMapping("/rule-precision")
     public ResponseEntity<List<RulePrecisionDTO>> getRulePrecision() {
         return ResponseEntity.ok(riskEventService.getRulePrecision());
+    }
+
+    // GET /api/risk-events/rule-heatmap — per-rule trigger counts across the last N hours
+    @GetMapping("/rule-heatmap")
+    public ResponseEntity<RuleHeatmapDTO> getRuleHeatmap(
+            @RequestParam(name = "hours", defaultValue = "24") int hours) {
+        return ResponseEntity.ok(riskEventService.getRuleHeatmap(hours));
     }
 
     // GET /api/risk-events/review-queue — flagged events awaiting a human decision
