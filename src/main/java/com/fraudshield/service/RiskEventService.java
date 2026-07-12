@@ -5,6 +5,7 @@ import com.fraudshield.dto.DisputeEvidenceDTO;
 import com.fraudshield.dto.FinancialImpactDTO;
 import com.fraudshield.dto.HourlyStatDTO;
 import com.fraudshield.dto.RiskEventDTO;
+import com.fraudshield.dto.RuleHeatmapDTO;
 import com.fraudshield.dto.RulePrecisionDTO;
 import com.fraudshield.dto.UserRiskProfileDTO;
 import com.fraudshield.exception.ResourceNotFoundException;
@@ -424,6 +425,70 @@ public class RiskEventService {
         double curPct   = cur[0]   * 100.0 / cur[1];
         double priorPct = prior[0] * 100.0 / prior[1];
         return Math.round((curPct - priorPct) * 100.0) / 100.0;
+    }
+
+    /**
+     * 规则×小时热力图 — 每条规则在过去N小时每个整点的命中数。
+     * Rule × hour heatmap: per-rule trigger counts across each of the last N hourly
+     * buckets. Columns are a fixed contiguous run (oldest→newest) so empty hours still
+     * hold a column and the grid stays rectangular; rows are sorted busiest-first.
+     * Same demo-scale full-scan trade-off as the other aggregations.
+     */
+    public RuleHeatmapDTO getRuleHeatmap(int hours) {
+        int span = Math.max(1, Math.min(hours, 48));   // clamp: one demo grid, not a data dump
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime start = now.minusHours(span - 1L).withMinute(0).withSecond(0).withNano(0);
+
+        // 列：从start到当前整点，每小时一列 / columns: one per hour from start to now
+        List<LocalDateTime> slots = new ArrayList<>(span);
+        List<String> hourLabels = new ArrayList<>(span);
+        DateTimeFormatter hh = DateTimeFormatter.ofPattern("HH:00");
+        for (int i = 0; i < span; i++) {
+            LocalDateTime slot = start.plusHours(i);
+            slots.add(slot);
+            hourLabels.add(slot.format(hh));
+        }
+        // 整点 → 列索引，O(1)分桶 / hour-start → column index for O(1) bucketing
+        Map<LocalDateTime, Integer> slotIndex = new HashMap<>();
+        for (int i = 0; i < slots.size(); i++) {
+            slotIndex.put(slots.get(i), i);
+        }
+
+        Map<String, long[]> byRule = new HashMap<>();
+        for (RiskEvent e : repository.findByDetectedAtBetween(start, now)) {
+            if (e.getDetectedAt() == null
+                    || e.getTriggeredRules() == null || e.getTriggeredRules().isBlank()) {
+                continue;
+            }
+            LocalDateTime slot = e.getDetectedAt().withMinute(0).withSecond(0).withNano(0);
+            Integer col = slotIndex.get(slot);
+            if (col == null) {
+                continue;   // outside the rendered window (clock skew / boundary)
+            }
+            for (String raw : e.getTriggeredRules().split(",")) {
+                String rule = raw.trim();
+                if (!rule.isEmpty()) {
+                    byRule.computeIfAbsent(rule, r -> new long[span])[col]++;
+                }
+            }
+        }
+
+        long peak = 0;
+        List<RuleHeatmapDTO.RuleRow> rows = new ArrayList<>();
+        for (Map.Entry<String, long[]> entry : byRule.entrySet()) {
+            long[] counts = entry.getValue();
+            long total = 0;
+            for (long c : counts) {
+                total += c;
+                peak = Math.max(peak, c);
+            }
+            rows.add(RuleHeatmapDTO.RuleRow.builder()
+                    .rule(entry.getKey()).counts(counts).total(total).build());
+        }
+        rows.sort(Comparator.comparingLong(RuleHeatmapDTO.RuleRow::getTotal).reversed()
+                .thenComparing(RuleHeatmapDTO.RuleRow::getRule));
+
+        return RuleHeatmapDTO.builder().hours(hourLabels).rules(rows).peak(peak).build();
     }
 
     /**
