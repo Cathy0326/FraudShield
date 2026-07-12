@@ -15,6 +15,31 @@
     <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
   </Match>
 
+  <!-- Spring-managed singletons hold their constructor-injected collaborators
+       (StringRedisTemplate, repositories, MeterRegistry, KafkaTemplate, other beans)
+       by design. Defensively copying an injected framework bean is meaningless and
+       often impossible, so EI_EXPOSE_REP2 on these @Component/@Service/@Controller/
+       @Configuration constructors is a false positive for the dependency-injection
+       pattern — same rationale as the model/dto exclusions above. -->
+  <Match>
+    <Or>
+      <Class name="~com\.fraudshield\.config\..*"/>
+      <Class name="~com\.fraudshield\.controller\..*"/>
+      <Class name="~com\.fraudshield\.kafka\..*"/>
+      <Class name="~com\.fraudshield\.metrics\..*"/>
+      <Class name="~com\.fraudshield\.rule\..*"/>
+      <Class name="~com\.fraudshield\.service\..*"/>
+    </Or>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+  </Match>
+
+  <!-- The LLM prompt intentionally uses \n (platform-independent) rather than %n,
+       which would emit \r\n on Windows and change the exact prompt sent to the model. -->
+  <Match>
+    <Class name="com.fraudshield.service.AzureOpenAIService"/>
+    <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+  </Match>
+
   <!-- Spring Security CSRF disabled intentionally (stateless JWT API) -->
   <Match>
     <Bug pattern="SPRING_CSRF_PROTECTION_DISABLED"/>
