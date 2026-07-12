@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getEventsByDateRange, getRulePrecision, getFinancialImpact } from '../services/api';
+import { getEventsByDateRange, getRulePrecision, getFinancialImpact, getDashboardStats } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -156,6 +156,75 @@ function Waterfall({ impact }) {
   );
 }
 
+// ── 检测→审核→定案 漏斗 —— PostHog式转化漏斗，回答"案子卡在哪、漏在哪"
+//    Detection → Review → Confirmed funnel: where do cases pile up, where do they leak?
+//    Flagged = persisted risk events; Reviewed/Confirmed come from review decisions.
+function PipelineFunnel({ flagged, impact }) {
+  const reviewed  = (impact.interceptedCount ?? 0) + (impact.falsePositiveCount ?? 0) + (impact.approvedCount ?? 0);
+  const confirmed = impact.interceptedCount ?? 0;
+  const released  = (impact.falsePositiveCount ?? 0) + (impact.approvedCount ?? 0);
+  // 未定案积压 = 已标记但还没审 —— 漏斗最该关注的"漏点"
+  // Backlog = flagged but not yet reviewed; the leak the funnel exists to surface.
+  const pending   = Math.max(0, flagged - reviewed);
+
+  const stages = [
+    { label: 'Flagged',        n: flagged,   c: '#818cf8', note: 'risk events detected' },
+    { label: 'Reviewed',       n: reviewed,  c: '#38bdf8', note: `${flagged ? Math.round((reviewed / flagged) * 100) : 0}% of flagged decided` },
+    { label: 'Confirmed fraud', n: confirmed, c: '#f43f5e', note: `${reviewed ? Math.round((confirmed / reviewed) * 100) : 0}% of reviewed were real` },
+  ];
+  const top = Math.max(flagged, 1);
+
+  const soWhat = pending > 0
+    ? `${pending} flagged order${pending > 1 ? 's' : ''} still awaiting a decision — the backlog is where risk hides.`
+    : reviewed === 0
+      ? 'Nothing reviewed yet — decisions feed every rate on this page.'
+      : `Queue is current: every flagged order has a decision, ${released} released as good.`;
+
+  return (
+    <div className="space-y-3">
+      {stages.map((s, i) => (
+        <div key={s.label} className="flex items-center gap-3">
+          <div className="w-32 shrink-0 text-right">
+            <p className="text-sm text-slate-200">{s.label}</p>
+            <p className="text-[11px] text-slate-500">{s.note}</p>
+          </div>
+          <div className="flex-1 h-9 rounded-lg bg-white/5 overflow-hidden">
+            <div className="h-full rounded-lg flex items-center px-3 transition-all"
+                 style={{ width: `${Math.max(6, (s.n / top) * 100)}%`,
+                          background: `linear-gradient(90deg, ${s.c}40, ${s.c}20)`,
+                          borderLeft: `3px solid ${s.c}` }}>
+              <span className="text-sm font-bold tabular-nums text-white">{s.n.toLocaleString()}</span>
+            </div>
+          </div>
+          {i < stages.length - 1 && (
+            <span className="w-10 shrink-0 text-center text-[11px] text-slate-500 tabular-nums">
+              ↓{stages[i].n ? Math.round((stages[i + 1].n / stages[i].n) * 100) : 0}%
+            </span>
+          )}
+          {i === stages.length - 1 && <span className="w-10 shrink-0" />}
+        </div>
+      ))}
+      {pending > 0 && (
+        <div className="flex items-center gap-3">
+          <div className="w-32 shrink-0 text-right">
+            <p className="text-sm text-amber-300">Backlog</p>
+            <p className="text-[11px] text-slate-500">flagged, not yet reviewed</p>
+          </div>
+          <div className="flex-1 h-7 rounded-lg bg-white/5 overflow-hidden">
+            <div className="h-full rounded-lg flex items-center px-3"
+                 style={{ width: `${Math.max(6, (pending / top) * 100)}%`,
+                          background: '#fb923c22', borderLeft: '3px solid #fb923c' }}>
+              <span className="text-xs font-semibold tabular-nums text-amber-300">{pending.toLocaleString()}</span>
+            </div>
+          </div>
+          <span className="w-10 shrink-0" />
+        </div>
+      )}
+      <p className="text-xs leading-snug text-slate-400 border-t border-white/5 pt-3">{soWhat}</p>
+    </div>
+  );
+}
+
 function Panel({ title, subtitle, children, className = '' }) {
   return (
     <div className={`rise-in rounded-2xl border border-white/5 bg-dark-card/80 backdrop-blur-sm
@@ -181,12 +250,15 @@ export default function ReportsPage() {
   const [generated, setGenerated] = useState(false);
   const [rulePrecision, setRulePrecision] = useState([]);
   const [impact, setImpact] = useState(null);
+  const [stats, setStats] = useState(null);
 
-  // 规则精度独立于日期报表加载 —— 它反映的是全部历史标注
-  // Rule precision loads independently of the date report — it reflects all labels to date
+  // 规则精度/财务/概览独立于日期报表加载 —— 都反映全部历史，不受日期窗口约束
+  // Precision, finance, and overview load independently of the date report — all
+  // reflect the full history, not the selected window
   useEffect(() => {
     getRulePrecision().then(setRulePrecision).catch(() => {});
     getFinancialImpact().then(setImpact).catch(() => {});
+    getDashboardStats().then(setStats).catch(() => {});
   }, []);
 
   const handleGenerate = async () => {
@@ -231,11 +303,18 @@ export default function ReportsPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <h1 className="text-2xl font-bold text-white tracking-tight">Reports</h1>
 
-        {/* $ Waterfall — 财务视角一行叙事 / finance's one-line narrative */}
+        {/* 漏斗 + $瀑布：管道健康 与 财务叙事并排 / pipeline health beside the money story */}
         {impact && (
-          <Panel title="Financial Impact" subtitle="are we protecting more than we're costing?">
-            <Waterfall impact={impact} />
-          </Panel>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Panel title="Detection Pipeline" subtitle="detected → reviewed → confirmed">
+              <PipelineFunnel
+                flagged={(stats?.totalOrders ?? 0)}
+                impact={impact} />
+            </Panel>
+            <Panel title="Financial Impact" subtitle="are we protecting more than we're costing?">
+              <Waterfall impact={impact} />
+            </Panel>
+          </div>
         )}
 
         {/* Rule Health Board — GMC式状态卡网格，最吵的规则排最前 / GMC status grid, noisiest first */}
