@@ -28,6 +28,147 @@ function isoDate(d) {
   return tzAdjusted.toISOString().split('T')[0];
 }
 
+const usd = (n) => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n ?? 0)).toLocaleString();
+
+// ── 规则健康分级 —— GMC式"状态框架"：把每条规则判成一个可执行状态 + 一句该做什么
+//    Rule health grading — GMC's status framework: each rule becomes one actionable
+//    state plus a sentence on what to do about it. Ordering (worst first) is deliberate:
+//    a fraud lead should see the rule bleeding the most false alarms at the top.
+function gradeRule(r) {
+  const falseAlarms = (r.falsePositive ?? 0) + (r.approved ?? 0);
+  if (r.reviewedHits === 0 || r.precision == null) {
+    return {
+      key: 'UNGRADED', label: 'UNGRADED', c: '#64748b', falseAlarms,
+      soWhat: `${r.totalHits} hits, none reviewed yet — label a few to grade this rule.`,
+      rank: 2,   // 中间：既不健康也不明确有害 / neither proven good nor bad
+    };
+  }
+  if (r.precision >= 80) {
+    return {
+      key: 'HEALTHY', label: 'HEALTHY', c: '#34d399', falseAlarms,
+      soWhat: `Firing true ${r.precision.toFixed(0)}% of the time — keep it as is.`,
+      rank: 3,
+    };
+  }
+  if (r.precision >= 50) {
+    return {
+      key: 'WATCH', label: 'WATCH', c: '#fb923c', falseAlarms,
+      soWhat: `${falseAlarms} of ${r.reviewedHits} calls were false alarms — tighten a condition.`,
+      rank: 1,
+    };
+  }
+  return {
+    key: 'NOISY', label: 'NOISY', c: '#f43f5e', falseAlarms,
+    soWhat: `Mostly wrong (${r.precision.toFixed(0)}% precision) — lower its weight or add a guard.`,
+    rank: 0,   // 最优先：噪声规则拖垮整个队列的信噪比 / noisiest first
+  };
+}
+
+function RuleHealthCard({ r }) {
+  const g = gradeRule(r);
+  const pct = r.precision;
+  return (
+    <div className="rise-in relative overflow-hidden rounded-2xl border border-white/5
+                    bg-gradient-to-br from-dark-card to-[#141d30] shadow-lg shadow-black/20
+                    p-5 transition-all duration-200 hover:-translate-y-0.5">
+      <span className="absolute left-0 top-0 h-full w-1" style={{ background: g.c }} />
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-mono text-sm text-slate-200 leading-tight">{r.rule}</p>
+        <span className="shrink-0 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full"
+              style={{ color: g.c, background: `${g.c}1a`, border: `1px solid ${g.c}33` }}>
+          {g.label}
+        </span>
+      </div>
+
+      <div className="mt-4 flex items-end gap-2">
+        <span className="text-3xl font-bold tabular-nums" style={{ color: g.c }}>
+          {pct == null ? '—' : `${pct.toFixed(0)}%`}
+        </span>
+        <span className="text-xs text-slate-500 mb-1">precision</span>
+      </div>
+      <div className="mt-2 h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+        <div className="h-full rounded-full transition-all"
+             style={{ width: `${pct ?? 0}%`, background: g.c }} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+        {[
+          { k: 'Hits',      v: r.totalHits,      c: 'text-slate-300' },
+          { k: 'Confirmed', v: r.confirmedFraud, c: 'text-emerald-300' },
+          { k: 'Wrong',     v: g.falseAlarms,    c: 'text-rose-300' },
+        ].map(s => (
+          <div key={s.k}>
+            <p className={`text-lg font-semibold tabular-nums ${s.c}`}>{s.v}</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">{s.k}</p>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-4 text-xs leading-snug text-slate-400 border-t border-white/5 pt-3">{g.soWhat}</p>
+    </div>
+  );
+}
+
+// ── $瀑布：拦截额(+) → 误杀额(−) → 净保护 —— Snowflake式"成本抵价值"一图看清
+//    Money waterfall: intercepted (+) minus false-kill (−) equals net protected.
+function Waterfall({ impact }) {
+  const intercepted = impact.interceptedAmount ?? 0;
+  const falseKill   = impact.falsePositiveAmount ?? 0;
+  const net         = intercepted - falseKill;
+  const scale = Math.max(intercepted, 1);
+  const bar = (v) => `${Math.min(100, (Math.abs(v) / scale) * 100)}%`;
+  const rows = [
+    { label: 'Fraud intercepted', sub: `${impact.interceptedCount ?? 0} confirmed`,      v: intercepted, c: '#34d399', sign: '+' },
+    { label: 'Revenue wrongly killed', sub: `${impact.falsePositiveCount ?? 0} false positives`, v: -falseKill,  c: '#f43f5e', sign: '−' },
+  ];
+  return (
+    <div className="space-y-3">
+      {rows.map(row => (
+        <div key={row.label} className="flex items-center gap-3">
+          <div className="w-44 shrink-0">
+            <p className="text-sm text-slate-200">{row.label}</p>
+            <p className="text-[11px] text-slate-500">{row.sub}</p>
+          </div>
+          <div className="flex-1 h-7 rounded-lg bg-white/5 overflow-hidden">
+            <div className="h-full rounded-lg flex items-center justify-end px-2"
+                 style={{ width: bar(row.v), background: `${row.c}33`, borderRight: `2px solid ${row.c}` }}>
+              <span className="text-xs font-semibold tabular-nums" style={{ color: row.c }}>
+                {row.sign}{usd(row.v)}
+              </span>
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center gap-3 border-t border-white/10 pt-3">
+        <div className="w-44 shrink-0">
+          <p className="text-sm font-semibold text-white">Net protected</p>
+          <p className="text-[11px] text-slate-500">
+            {impact.interceptToFalseKillRatio == null
+              ? 'nothing wrongly blocked yet'
+              : `${impact.interceptToFalseKillRatio.toFixed(1)}× caught per $1 lost`}
+          </p>
+        </div>
+        <p className={`text-2xl font-bold tabular-nums ${net >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+          {usd(net)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function Panel({ title, subtitle, children, className = '' }) {
+  return (
+    <div className={`rise-in rounded-2xl border border-white/5 bg-dark-card/80 backdrop-blur-sm
+                     shadow-lg shadow-black/20 ${className}`}>
+      <div className="px-5 pt-5">
+        <h2 className="text-base font-semibold text-white">{title}</h2>
+        {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+      </div>
+      <div className="p-5 pt-4">{children}</div>
+    </div>
+  );
+}
+
 export default function ReportsPage() {
   // 默认最近7天 —— 让日期选择器一打开就"能用"，而不是两个空框
   // Default to the last 7 days so the pickers work out of the box, not two empty boxes
@@ -76,213 +217,136 @@ export default function ReportsPage() {
   const high   = events.filter(e => e.riskLevel === 'HIGH').length;
   const medium = events.filter(e => e.riskLevel === 'MEDIUM').length;
 
+  // 最需要行动的规则排前：NOISY → WATCH → UNGRADED → HEALTHY，同级按误报数降序
+  // Sort so the rule most in need of a decision leads; ties broken by false-alarm volume
+  const rulesRanked = [...rulePrecision].sort((a, b) => {
+    const ga = gradeRule(a), gb = gradeRule(b);
+    return ga.rank - gb.rank || gb.falseAlarms - ga.falseAlarms;
+  });
+  const noisyCount = rulesRanked.filter(r => gradeRule(r).key === 'NOISY').length;
+
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen">
       <NavBar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <h1 className="text-2xl font-bold text-white">Reports</h1>
+        <h1 className="text-2xl font-bold text-white tracking-tight">Reports</h1>
 
-        {/* Filters */}
-        <div className="bg-dark-card border border-dark-border rounded-xl p-5">
-          <h2 className="text-base font-semibold text-white mb-4">Date Range</h2>
+        {/* $ Waterfall — 财务视角一行叙事 / finance's one-line narrative */}
+        {impact && (
+          <Panel title="Financial Impact" subtitle="are we protecting more than we're costing?">
+            <Waterfall impact={impact} />
+          </Panel>
+        )}
+
+        {/* Rule Health Board — GMC式状态卡网格，最吵的规则排最前 / GMC status grid, noisiest first */}
+        <Panel
+          title="Rule Health Board"
+          subtitle={
+            rulesRanked.length === 0
+              ? 'graded from review decisions'
+              : noisyCount > 0
+                ? `${noisyCount} rule${noisyCount > 1 ? 's' : ''} running noisy — sorted worst-first`
+                : 'graded from review decisions · sorted worst-first'
+          }
+        >
+          {rulesRanked.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-8">
+              No rule hits recorded yet — nothing to grade.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {rulesRanked.map(r => <RuleHealthCard key={r.rule} r={r} />)}
+            </div>
+          )}
+        </Panel>
+
+        {/* Date-range report */}
+        <Panel title="Date Range" subtitle="pull risk events for a window, then export">
           <div className="flex flex-wrap items-end gap-4">
-            {/* colorScheme:'dark' —— 否则Chrome把日历图标画成黑色，深色背景上完全不可见，
-                看起来就像"选不了日期" / without it Chrome renders the calendar icon black
-                on our dark background — invisible, so the picker seems broken */}
+            {/* colorScheme:'dark' —— 否则Chrome把日历图标画成黑色，深色背景上不可见 */}
             <div>
               <label className="block text-xs text-slate-400 mb-1.5">From</label>
               <input type="date" value={startDate} max={endDate || undefined}
                 onChange={e => setStartDate(e.target.value)}
                 style={{ colorScheme: 'dark' }}
-                className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1.5">To</label>
               <input type="date" value={endDate} min={startDate || undefined}
                 onChange={e => setEndDate(e.target.value)}
                 style={{ colorScheme: 'dark' }}
-                className="bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="bg-dark-bg border border-white/10 rounded-lg px-3 py-2 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
             <button onClick={handleGenerate} disabled={loading}
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors">
+              className="px-5 py-2 text-white text-sm font-medium rounded-lg bg-gradient-to-r from-indigo-500 to-violet-500
+                         shadow-lg shadow-indigo-900/30 hover:from-indigo-400 hover:to-violet-400 disabled:opacity-50 transition-all active:scale-95">
               {loading ? 'Generating…' : 'Generate Report'}
             </button>
             {generated && events.length > 0 && (
               <button onClick={() => exportCsv(events)}
-                className="px-5 py-2 bg-green-700/40 hover:bg-green-700/60 text-green-300 border border-green-500/30 text-sm font-medium rounded-lg transition-colors">
+                className="px-5 py-2 bg-emerald-700/40 hover:bg-emerald-700/60 text-emerald-300 border border-emerald-500/30 text-sm font-medium rounded-lg transition-colors">
                 ⬇ Export CSV
               </button>
             )}
           </div>
-        </div>
+        </Panel>
 
         {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">{error}</div>
+          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300">{error}</div>
         )}
-
-        {/* Financial Impact — 财务视角：拦截的损失 vs 误杀的营收 / finance view: losses avoided vs revenue wrongly blocked */}
-        {impact && (
-          <div className="bg-dark-card border border-dark-border rounded-xl p-5">
-            <h2 className="text-base font-semibold text-white">Financial Impact</h2>
-            <p className="text-xs text-slate-500 mt-1 mb-4">
-              From review decisions — every confirmed-fraud dollar is a chargeback avoided;
-              every false-positive dollar is legitimate revenue we wrongly blocked.
-            </p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="border border-green-500/30 rounded-lg p-4">
-                <p className="text-xs text-slate-400">Fraud Intercepted</p>
-                <p className="text-2xl font-bold text-green-400 mt-1">
-                  ${impact.interceptedAmount?.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-500">{impact.interceptedCount} orders</p>
-              </div>
-              <div className="border border-amber-500/30 rounded-lg p-4">
-                <p className="text-xs text-slate-400">Revenue Wrongly Blocked</p>
-                <p className="text-2xl font-bold text-amber-400 mt-1">
-                  ${impact.falsePositiveAmount?.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-500">{impact.falsePositiveCount} false positives</p>
-              </div>
-              <div className="border border-dark-border rounded-lg p-4">
-                <p className="text-xs text-slate-400">Reviewed &amp; Released</p>
-                <p className="text-2xl font-bold text-slate-200 mt-1">
-                  ${impact.approvedAmount?.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-500">{impact.approvedCount} orders</p>
-              </div>
-              <div className="border border-indigo-500/30 rounded-lg p-4">
-                <p className="text-xs text-slate-400">Intercept : False-Kill Ratio</p>
-                <p className="text-2xl font-bold text-indigo-300 mt-1">
-                  {impact.interceptToFalseKillRatio == null
-                    ? '∞'
-                    : `${impact.interceptToFalseKillRatio.toFixed(1)} : 1`}
-                </p>
-                <p className="text-xs text-slate-500">the fraud program&apos;s one-line ROI</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Rule Precision — 审核标注反哺规则质量评估 / review labels feeding back into rule quality */}
-        <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-dark-border">
-            <h2 className="text-base font-semibold text-white">Rule Precision</h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Computed from review decisions — which rules are firing correctly, and which
-              generate the most false alarms. Rules with the most wrong calls sort first.
-            </p>
-          </div>
-          {rulePrecision.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-8">
-              No rule hits recorded yet.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-dark-border text-slate-400 text-xs uppercase">
-                    {['Rule', 'Total Hits', 'Reviewed', 'Confirmed Fraud', 'False Alarms', 'Precision'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-dark-border">
-                  {rulePrecision.map(r => {
-                    const falseAlarms = (r.falsePositive ?? 0) + (r.approved ?? 0);
-                    return (
-                      <tr key={r.rule} className="hover:bg-dark-bg/40 transition-colors">
-                        <td className="px-4 py-3 text-slate-200 font-medium">{r.rule}</td>
-                        <td className="px-4 py-3 text-slate-300">{r.totalHits}</td>
-                        <td className="px-4 py-3 text-slate-400">{r.reviewedHits}</td>
-                        <td className="px-4 py-3 text-red-300">{r.confirmedFraud}</td>
-                        <td className="px-4 py-3 text-amber-300">{falseAlarms}</td>
-                        <td className="px-4 py-3">
-                          {r.precision == null ? (
-                            <span className="text-xs text-slate-500">no labels yet</span>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <div className="w-24 bg-dark-bg rounded-full h-2">
-                                <div
-                                  className="h-2 rounded-full"
-                                  style={{
-                                    width: `${r.precision}%`,
-                                    background: r.precision >= 80 ? '#22c55e' :
-                                                r.precision >= 50 ? '#f97316' : '#ef4444',
-                                  }}
-                                />
-                              </div>
-                              <span className={`text-xs font-semibold ${
-                                r.precision >= 80 ? 'text-green-400' :
-                                r.precision >= 50 ? 'text-orange-400' : 'text-red-400'
-                              }`}>
-                                {r.precision.toFixed(0)}%
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
 
         {loading ? <LoadingSpinner /> : generated && (
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-3 gap-4">
               {[
-                { label: 'Total in Range', value: events.length },
-                { label: 'High Risk',      value: high,   cls: 'border-red-500/30' },
-                { label: 'Medium Risk',    value: medium, cls: 'border-orange-500/30' },
+                { label: 'Total in Range', value: events.length, accent: '#818cf8' },
+                { label: 'High Risk',      value: high,   accent: '#f43f5e' },
+                { label: 'Medium Risk',    value: medium, accent: '#fb923c' },
               ].map(c => (
-                <div key={c.label} className={`bg-dark-card border ${c.cls ?? 'border-dark-border'} rounded-xl p-4`}>
+                <div key={c.label}
+                     className="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-dark-card to-[#141d30] p-4">
+                  <span className="absolute left-0 top-0 h-full w-1" style={{ background: c.accent }} />
                   <p className="text-xs text-slate-400">{c.label}</p>
-                  <p className="text-2xl font-bold text-white mt-1">{c.value}</p>
+                  <p className="text-2xl font-bold text-white mt-1 tabular-nums">{c.value}</p>
                 </div>
               ))}
             </div>
 
             {/* Results table */}
-            <div className="bg-dark-card border border-dark-border rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-dark-border">
-                <h2 className="text-base font-semibold text-white">
-                  Report Results ({events.length} events)
-                </h2>
-              </div>
+            <Panel title={`Report Results (${events.length} events)`} className="overflow-hidden">
               {events.length === 0 ? (
                 <p className="text-slate-500 text-center py-10 text-sm">No events found</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto -mx-5 -mb-5">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-dark-border text-slate-400 text-xs uppercase">
+                      <tr className="border-b border-white/5 text-slate-500 text-xs uppercase tracking-wider">
                         {['Time','Order ID','User','IP','Amount','Risk Level','Rules'].map(h => (
-                          <th key={h} className="px-4 py-3 text-left">{h}</th>
+                          <th key={h} className="px-5 py-3 text-left font-medium">{h}</th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-dark-border">
+                    <tbody className="divide-y divide-white/5">
                       {events.map(e => (
-                        <tr key={e.id} className="hover:bg-dark-bg/40 transition-colors">
-                          <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                        <tr key={e.id} className="hover:bg-white/[0.03] transition-colors">
+                          <td className="px-5 py-3 text-slate-400 whitespace-nowrap">
                             {e.detectedAt ? new Date(e.detectedAt).toLocaleString() : '—'}
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs text-slate-300">{e.orderId}</td>
-                          <td className="px-4 py-3 text-slate-300">{e.userId}</td>
-                          <td className="px-4 py-3 font-mono text-xs text-slate-400">{e.ipAddress}</td>
-                          <td className="px-4 py-3 text-slate-300">${e.amount?.toFixed(2)}</td>
-                          <td className="px-4 py-3"><RiskBadge riskLevel={e.riskLevel} /></td>
-                          <td className="px-4 py-3 text-slate-400 text-xs">{e.triggeredRules?.join(', ')}</td>
+                          <td className="px-5 py-3 font-mono text-xs text-indigo-300">{e.orderId}</td>
+                          <td className="px-5 py-3 text-slate-300">{e.userId}</td>
+                          <td className="px-5 py-3 font-mono text-xs text-slate-400">{e.ipAddress}</td>
+                          <td className="px-5 py-3 text-slate-200 tabular-nums">${e.amount?.toFixed(2)}</td>
+                          <td className="px-5 py-3"><RiskBadge riskLevel={e.riskLevel} /></td>
+                          <td className="px-5 py-3 text-slate-400 text-xs">{e.triggeredRules?.join(', ')}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-            </div>
+            </Panel>
           </>
         )}
       </div>
