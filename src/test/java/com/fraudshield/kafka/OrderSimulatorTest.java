@@ -60,10 +60,10 @@ class OrderSimulatorTest {
         // ~77% normal; scenario shares are calibrated to each rule's threshold
         List<Order> orders = sample(600);
 
-        long blacklistIp = orders.stream().filter(o -> "10.0.0.1".equals(o.getIpAddress())).count();
+        long blacklistIp = orders.stream().filter(o -> o.getUserId().startsWith("USER-DRIFTER-")).count();
         long burst       = orders.stream().filter(o -> "77.77.77.77".equals(o.getIpAddress())).count();
         long youngAcct   = orders.stream().filter(o -> "USER-TEST-001".equals(o.getUserId())).count();
-        long spike       = orders.stream().filter(o -> "USER-TEST-002".equals(o.getUserId())).count();
+        long spike       = orders.stream().filter(o -> isSpikeUser(o.getUserId())).count();
         long cardTest    = orders.stream().filter(o -> "66.66.66.66".equals(o.getIpAddress())).count();
         long dropAddr    = orders.stream().filter(o -> o.getUserId().startsWith("USER-MULE-")).count();
         long suspicious  = blacklistIp + burst + youngAcct + spike + cardTest + dropAddr;
@@ -80,6 +80,51 @@ class OrderSimulatorTest {
         assertThat(spike).isPositive();
         assertThat(cardTest).isPositive();
         assertThat(dropAddr).isPositive();
+    }
+
+    private static boolean isSpikeUser(String userId) {
+        return "USER-TEST-002".equals(userId) || userId.startsWith("USER-SPIKE-");
+    }
+
+    @Test
+    void amountScenarios_rotateIpsSoTheyCannotDominateTheVelocityWindow() {
+        // 核心修复：金额类场景（新账号/金额异常）的IP必须轮换，任一IP都不能在
+        // FrequentIpRule的5分钟窗口里堆积 —— 这正是"203.0.113.202 28单/5分钟"的病根。
+        // The core fix: the amount-based scenarios (young-account / amount-spike) must
+        // rotate IPs so no single one accumulates in FrequentIpRule's 5-minute window —
+        // that was the root of the "203.0.113.202: 28 orders in 5 min" false velocity.
+        List<Order> amountOrders = sample(4000).stream()
+                .filter(o -> "USER-TEST-001".equals(o.getUserId()) || isSpikeUser(o.getUserId()))
+                .collect(Collectors.toList());
+
+        assertThat(amountOrders).isNotEmpty();
+        // 都在专属攻击网段，绝不复用正常用户或黑名单IP / dedicated attack range only
+        assertThat(amountOrders).allMatch(o -> o.getIpAddress().startsWith("198.51.100."));
+
+        Map<String, Long> perIp = amountOrders.stream()
+                .collect(Collectors.groupingBy(Order::getIpAddress, Collectors.counting()));
+        // 摊开在大量IP上，且没有单点热点（任一IP占比 < 5%）
+        // Spread across many IPs with no hotspot (no single IP holds >5% of them)
+        assertThat(perIp.size()).isGreaterThan(30);
+        long maxPerIp = perIp.values().stream().mapToLong(Long::longValue).max().orElse(0);
+        assertThat((double) maxPerIp / amountOrders.size()).isLessThan(0.05);
+    }
+
+    @Test
+    void spikeScenario_usesSeededOldAccountPool_notNewAccounts() {
+        // 金额异常场景的用户必须来自种子化的老账号池，否则会误触HighAmountNewUserRule
+        // Amount-spike users must come from the seeded old-account pool, or they'd
+        // mis-trip HighAmountNewUserRule instead of AbnormalAmountRule
+        List<Order> spike = sample(3000).stream()
+                .filter(o -> isSpikeUser(o.getUserId()))
+                .collect(Collectors.toList());
+
+        assertThat(spike).isNotEmpty();
+        // 轮换覆盖多个用户，避免单用户EMA很快追平尖峰 / rotation spans several users
+        assertThat(spike.stream().map(Order::getUserId).distinct().count()).isGreaterThan(2);
+        // 金额都在 3x种子均值($50) 之上，稳定命中AbnormalAmountRule
+        // Amounts stay above 3x the seeded $50 average, reliably tripping AbnormalAmountRule
+        assertThat(spike).allMatch(o -> o.getAmount() > 150.0);
     }
 
     @Test
