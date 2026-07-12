@@ -5,7 +5,10 @@ import {
   ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid,
   BarChart, Bar, LabelList,
 } from 'recharts';
-import { getDashboardStats, getRecentEvents, triggerTestOrders } from '../services/api';
+import {
+  getDashboardStats, getRecentEvents, triggerTestOrders,
+  getFinancialImpact, getReviewQueue,
+} from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -95,6 +98,24 @@ function KpiCard({ label, value, sub, accent, icon, delta, spark, sparkId }) {
   );
 }
 
+// 指挥中心大数字卡 —— 左侧严重度色条 + 卡内一句自然语言结论（数字不解释就是噪音）
+// Command-center stat: left severity rail + a one-line "so what" — a number
+// without a sentence is just noise (PostHog's habit).
+function InsightCard({ label, value, soWhat, accent, mono }) {
+  return (
+    <div className="rise-in relative overflow-hidden rounded-2xl border border-white/5
+                    bg-gradient-to-br from-dark-card to-[#141d30] shadow-lg shadow-black/20
+                    pl-5 pr-4 py-4 transition-all duration-200 hover:-translate-y-0.5">
+      <span className="absolute left-0 top-0 h-full w-1" style={{ background: accent }} />
+      <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{label}</p>
+      <p className={`mt-1 text-3xl font-bold text-white leading-none ${mono ? 'font-mono' : 'tabular-nums'}`}>
+        {value}
+      </p>
+      <p className="mt-2 text-xs leading-snug text-slate-400">{soWhat}</p>
+    </div>
+  );
+}
+
 function Panel({ title, subtitle, children, className = '' }) {
   return (
     <div className={`rise-in rounded-2xl border border-white/5 bg-dark-card/80 backdrop-blur-sm
@@ -112,6 +133,8 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [stats,    setStats]    = useState(null);
   const [events,   setEvents]   = useState([]);
+  const [finance,  setFinance]  = useState(null);
+  const [queue,    setQueue]    = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState('');
   const [lastSync, setLastSync] = useState('');
@@ -119,9 +142,19 @@ export default function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [s, e] = await Promise.all([getDashboardStats(), getRecentEvents(10)]);
+      // 财务/队列是"决策质量"层，缺了不该整屏报错 —— 各自兜底
+      // Finance + queue power the decision-quality layer; degrade them
+      // individually so one slow endpoint never blanks the whole board.
+      const [s, e, f, q] = await Promise.all([
+        getDashboardStats(),
+        getRecentEvents(10),
+        getFinancialImpact().catch(() => null),
+        getReviewQueue().catch(() => []),
+      ]);
       setStats(s);
       setEvents(e);
+      setFinance(f);
+      setQueue(Array.isArray(q) ? q : []);
       setError('');
       setLastSync(new Date().toLocaleTimeString());
     } catch {
@@ -184,6 +217,39 @@ export default function DashboardPage() {
     ],
   })) ?? [];
 
+  // ── Decision-Quality Command Center —— 用美元和精度讲"我们在赢吗" ──
+  //    Money + precision answering finance's one question: are we winning?
+  const netProtected = finance
+    ? (finance.interceptedAmount ?? 0) - (finance.falsePositiveAmount ?? 0) : null;
+  const killRatio = finance?.interceptToFalseKillRatio; // intercepted$ per $1 wrongly killed
+
+  // 队列期望损失 = Σ score×amount —— 比"件数"更能回答"先审哪单"
+  // Queue expected loss = Σ score×amount; drives triage far better than a count.
+  const queueExpLoss = queue.reduce((s, e) => s + (e.riskScore ?? 0) * (e.amount ?? 0), 0);
+
+  // ── Attack Radar —— 对每个钟点做 baseline ± 2σ 比较，自动冒出异常 ──
+  //    Same-hour baseline comparison; anomalies surface themselves (GA4 Insights style).
+  const radar = (stats?.hourlyTrend ?? [])
+    .map(h => {
+      const sigma = h.baselineSigma ?? 0;
+      const base  = h.baselineRisk ?? 0;
+      const z = sigma > 0 ? (h.riskCount - base) / sigma : (h.riskCount > base ? 99 : 0);
+      return { hour: h.hour, riskCount: h.riskCount, base, z };
+    })
+    .filter(h => h.z >= 2 && h.riskCount >= 3)     // 2σ门槛 + 绝对量地板，压掉噪声 / floor kills noise
+    .sort((a, b) => b.z - a.z)
+    .slice(0, 3);
+
+  // 威胁等级：异常强度优先，其次风险率 / threat = anomaly strength first, then risk rate
+  const topZ = radar[0]?.z ?? 0;
+  const threat =
+    topZ >= 3 || (stats?.riskRate ?? 0) > 20 ? { label: 'ELEVATED', c: '#f43f5e', k: 'red'   }
+    : topZ >= 2 || (stats?.riskRate ?? 0) > 5 ? { label: 'GUARDED',  c: '#fb923c', k: 'amber' }
+    :                                           { label: 'NOMINAL',  c: '#34d399', k: 'green' };
+
+  const fmtUsd = (n) => n == null ? '—'
+    : (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString();
+
   return (
     <div className="min-h-screen">
       <NavBar />
@@ -213,6 +279,29 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Threat Level strip —— 全屏签名视觉：作战室的"当前态势"一眼可读
+            Signature visual: a mission-control status rail read in one glance */}
+        {!loading && (
+          <div className="rise-in flex items-center gap-3 rounded-xl border px-4 py-2.5"
+               style={{ borderColor: `${threat.c}40`, background: `${threat.c}12` }}>
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              {threat.k !== 'green' && (
+                <span className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping"
+                      style={{ background: threat.c }} />
+              )}
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: threat.c }} />
+            </span>
+            <span className="font-mono text-xs font-semibold tracking-widest" style={{ color: threat.c }}>
+              THREAT&nbsp;LEVEL&nbsp;·&nbsp;{threat.label}
+            </span>
+            <span className="text-xs text-slate-400 truncate">
+              {radar.length
+                ? `${radar.length} anomal${radar.length > 1 ? 'ies' : 'y'} above 7-day baseline · top spike ${topZ >= 99 ? '' : topZ.toFixed(1) + 'σ'}`
+                : `${queue.length} in queue · ${fmtUsd(queueExpLoss)} expected loss at stake`}
+            </span>
+          </div>
+        )}
+
         {error && (
           <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 flex items-center justify-between">
             <span>{error}</span>
@@ -222,6 +311,78 @@ export default function DashboardPage() {
 
         {loading ? <LoadingSpinner /> : (
           <>
+            {/* Section 0 — Decision-Quality Command Center + Attack Radar
+                每屏回答一个问题："我们在赢吗 / 该审什么" —— 叙事而非罗列
+                Each screen answers one question: are we winning / what to review. */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-2 space-y-4">
+                <div className="flex items-baseline justify-between">
+                  <h2 className="text-base font-semibold text-white">Command Center</h2>
+                  <span className="text-xs text-slate-500">are we winning?</span>
+                </div>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <InsightCard
+                    label="Net Protected" value={fmtUsd(netProtected)} accent="#34d399"
+                    soWhat={netProtected == null ? 'Awaiting reviewed labels.'
+                      : netProtected >= 0
+                        ? `Fraud $ stopped, net of revenue wrongly blocked.`
+                        : `We're killing more good revenue than fraud — loosen thresholds.`} />
+                  <InsightCard
+                    label="Intercept : False-kill" mono
+                    value={killRatio == null ? '—' : `${killRatio.toFixed(1)}×`} accent="#818cf8"
+                    soWhat={killRatio == null ? 'No wrongful blocks yet — clean run.'
+                      : `$${killRatio.toFixed(1)} of fraud caught per $1 of good revenue lost.`} />
+                  <InsightCard
+                    label="Queue Exposure" value={fmtUsd(queueExpLoss)} accent="#fb923c"
+                    soWhat={queue.length
+                      ? `Expected loss across ${queue.length} orders awaiting a decision.`
+                      : 'Queue is empty — nothing pending.'} />
+                  <InsightCard
+                    label="Losses Avoided" value={fmtUsd(finance?.interceptedAmount)} accent="#f43f5e"
+                    soWhat={finance?.interceptedCount
+                      ? `${finance.interceptedCount} confirmed-fraud orders that never charged back.`
+                      : 'No confirmed fraud recorded yet.'} />
+                </div>
+              </div>
+
+              {/* Attack Radar —— 自动异常卡，点它跳到已筛选的队列 / auto-anomaly cards → filtered queue */}
+              <Panel title="Attack Radar" subtitle="hours breaching the 7-day same-hour baseline">
+                {radar.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <p className="text-3xl">🦔</p>
+                    <p className="mt-2 text-sm text-slate-400">All quiet — nothing above baseline.</p>
+                    <p className="text-xs text-slate-600">Either you're good, or the fraudsters are on lunch.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {radar.map((h) => {
+                      const sev = h.z >= 3 ? '#f43f5e' : '#fb923c';
+                      return (
+                        <button
+                          key={h.hour}
+                          onClick={() => navigate('/review')}
+                          className="w-full text-left relative overflow-hidden rounded-xl border border-white/5
+                                     bg-white/[0.02] hover:bg-white/[0.05] transition-colors pl-4 pr-3 py-3"
+                        >
+                          <span className="absolute left-0 top-0 h-full w-1" style={{ background: sev }} />
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-xs" style={{ color: sev }}>
+                              {h.z >= 99 ? 'NEW' : `${h.z.toFixed(1)}σ`}
+                            </span>
+                            <span className="font-mono text-[11px] text-slate-500">{h.hour.split(' ')[1]}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-300 leading-snug">
+                            <span className="font-semibold text-white">{h.riskCount}</span> risk orders vs{' '}
+                            <span className="tabular-nums">{h.base.toFixed(1)}</span> expected — investigate →
+                          </p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </Panel>
+            </div>
+
             {/* Section A — KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard label="Total Processed" value={totalProcessed.toLocaleString()} sub="orders scored"
