@@ -5,14 +5,18 @@ export default function NavBar() {
   const { user, logout } = useAuth();
 
   const linkClass = ({ isActive }) =>
-    `px-3 py-2 rounded text-sm font-medium transition-colors ${
-      isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white hover:bg-dark-card'
+    `px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+      isActive
+        ? 'bg-indigo-500/90 text-white shadow-sm shadow-indigo-900/40'
+        : 'text-slate-400 hover:text-white hover:bg-white/5'
     }`;
 
   return (
-    <nav className="bg-dark-card border-b border-dark-border px-6 py-3 flex items-center justify-between">
+    <nav className="sticky top-0 z-30 bg-dark-card/70 backdrop-blur-md border-b border-white/5 px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-6">
-        <span className="text-indigo-400 font-bold text-lg tracking-tight">⚡ FraudShield</span>
+        <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
+          ⚡ FraudShield
+        </span>
         <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
         <NavLink to="/review"    className={linkClass}>Review Queue</NavLink>
         <NavLink to="/reports"   className={linkClass}>Reports</NavLink>
