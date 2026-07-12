@@ -84,7 +84,7 @@ export default function OrderDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen">
       <NavBar />
       <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -103,7 +103,7 @@ export default function OrderDetailPage() {
               <button
                 onClick={() => prevOrderId && navigate(`/orders/${prevOrderId}`)}
                 disabled={!prevOrderId}
-                className="text-sm px-3 py-1.5 bg-dark-card border border-dark-border hover:border-indigo-500/50 disabled:opacity-40 disabled:hover:border-dark-border text-slate-300 rounded-lg transition-colors"
+                className="text-sm px-3 py-1.5 bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 hover:border-indigo-500/50 disabled:opacity-40 disabled:hover:border-white/10 text-slate-300 rounded-lg transition-colors"
               >
                 ← Prev
               </button>
@@ -113,7 +113,7 @@ export default function OrderDetailPage() {
               <button
                 onClick={() => nextOrderId && navigate(`/orders/${nextOrderId}`)}
                 disabled={!nextOrderId}
-                className="text-sm px-3 py-1.5 bg-dark-card border border-dark-border hover:border-indigo-500/50 disabled:opacity-40 disabled:hover:border-dark-border text-slate-300 rounded-lg transition-colors"
+                className="text-sm px-3 py-1.5 bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 hover:border-indigo-500/50 disabled:opacity-40 disabled:hover:border-white/10 text-slate-300 rounded-lg transition-colors"
               >
                 Next →
               </button>
@@ -133,11 +133,11 @@ export default function OrderDetailPage() {
         </div>
 
         {loading ? <LoadingSpinner /> : error ? (
-          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400">{error}</div>
+          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300">{error}</div>
         ) : event && (
           <>
             {/* Order Info Card */}
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6">
+            <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl p-6">
               <h1 className="text-lg font-semibold text-white mb-4">Order Details</h1>
               <dl className="grid grid-cols-2 gap-4">
                 {[
@@ -167,7 +167,7 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Risk Assessment Card */}
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-5">
+            <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl p-6 space-y-5">
               <h2 className="text-lg font-semibold text-white">Risk Assessment</h2>
 
               <div className="flex items-center gap-3">
@@ -209,7 +209,7 @@ export default function OrderDetailPage() {
 
               {/* Explanation */}
               {event.explanation && (
-                <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
+                <div className="p-3 bg-dark-bg rounded-lg border border-white/10">
                   <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Explanation</p>
                   <p className="text-sm text-slate-300">{event.explanation}</p>
                 </div>
@@ -217,7 +217,7 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Review Decision Card — the human decision that closes the loop */}
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-4">
+            <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl p-6 space-y-4">
               <h2 className="text-lg font-semibold text-white">Review Decision</h2>
 
               {event.reviewStatus && event.reviewStatus !== 'PENDING_REVIEW' ? (
@@ -236,7 +236,7 @@ export default function OrderDetailPage() {
                     {event.reviewedAt && <> on {new Date(event.reviewedAt).toLocaleString()}</>}
                   </p>
                   {event.reviewNotes && (
-                    <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
+                    <div className="p-3 bg-dark-bg rounded-lg border border-white/10">
                       <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Notes</p>
                       <p className="text-sm text-slate-300">{event.reviewNotes}</p>
                     </div>
@@ -274,9 +274,9 @@ export default function OrderDetailPage() {
                     onChange={e => setReviewNotes(e.target.value)}
                     placeholder="Optional notes (e.g. verified with customer, chargeback reported…)"
                     rows={2}
-                    className="w-full text-sm bg-dark-bg border border-dark-border rounded-lg p-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50"
+                    className="w-full text-sm bg-dark-bg border border-white/10 rounded-lg p-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500/50"
                   />
-                  {reviewError && <p className="text-sm text-red-400">{reviewError}</p>}
+                  {reviewError && <p className="text-sm text-rose-300">{reviewError}</p>}
                   <div className="flex flex-wrap gap-3">
                     <button
                       onClick={() => handleReview('CONFIRMED_FRAUD')}
@@ -305,7 +305,7 @@ export default function OrderDetailPage() {
             </div>
 
             {/* AI Analysis Card */}
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-5">
+            <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-white">AI Analysis</h2>
                 {/* 按需触发AI分析（对MEDIUM订单在消费时已自动完成，此按钮用于手动触发其他订单）
@@ -351,7 +351,7 @@ export default function OrderDetailPage() {
 
                   {/* Reasoning */}
                   {ai.reasoning && (
-                    <div className="p-3 bg-dark-bg rounded-lg border border-dark-border">
+                    <div className="p-3 bg-dark-bg rounded-lg border border-white/10">
                       <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Reasoning</p>
                       <p className="text-sm text-slate-300">{ai.reasoning}</p>
                     </div>
@@ -392,7 +392,7 @@ export default function OrderDetailPage() {
             </div>
 
             {/* User Risk Profile Card — this user's order history + shared-IP linked accounts */}
-            <div className="bg-dark-card border border-dark-border rounded-xl p-6 space-y-5">
+            <div className="bg-dark-card/80 backdrop-blur-sm shadow-lg shadow-black/20 border border-white/10 rounded-2xl p-6 space-y-5">
               <h2 className="text-lg font-semibold text-white">User Risk Profile</h2>
 
               {profileLoading ? <LoadingSpinner /> : !profile ? (
@@ -441,23 +441,23 @@ export default function OrderDetailPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b border-dark-border text-slate-400 text-xs uppercase tracking-wide">
+                            <tr className="border-b border-white/5 text-slate-500 text-xs uppercase tracking-wider">
                               {['Time', 'Order ID', 'Amount', 'Risk'].map(h => (
                                 <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>
                               ))}
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-dark-border">
+                          <tbody className="divide-y divide-white/5">
                             {profile.recentEvents.map(e => (
                               <tr
                                 key={e.id}
                                 onClick={() => e.orderId !== orderId && navigate(`/orders/${e.orderId}`)}
-                                className={e.orderId === orderId ? 'bg-indigo-900/20' : 'hover:bg-dark-bg/50 cursor-pointer transition-colors'}
+                                className={e.orderId === orderId ? 'bg-indigo-900/20' : 'hover:bg-white/[0.03] cursor-pointer transition-colors'}
                               >
                                 <td className="px-3 py-2 text-slate-400 whitespace-nowrap">
                                   {e.detectedAt ? new Date(e.detectedAt).toLocaleString() : '—'}
                                 </td>
-                                <td className="px-3 py-2 font-mono text-xs text-slate-300">{e.orderId}</td>
+                                <td className="px-3 py-2 font-mono text-xs text-indigo-300">{e.orderId}</td>
                                 <td className="px-3 py-2 text-slate-300">${e.amount?.toFixed(2)}</td>
                                 <td className="px-3 py-2"><RiskBadge riskLevel={e.riskLevel} /></td>
                               </tr>
