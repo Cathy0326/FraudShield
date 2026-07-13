@@ -122,9 +122,18 @@ class OrderSimulatorTest {
         assertThat(spike).isNotEmpty();
         // 轮换覆盖多个用户，避免单用户EMA很快追平尖峰 / rotation spans several users
         assertThat(spike.stream().map(Order::getUserId).distinct().count()).isGreaterThan(2);
-        // 金额都在 3x种子均值($50) 之上，稳定命中AbnormalAmountRule
-        // Amounts stay above 3x the seeded $50 average, reliably tripping AbnormalAmountRule
-        assertThat(spike).allMatch(o -> o.getAmount() > 150.0);
+        // 新行为：多数订单贴着$50基线（把EMA拉住），约1/3是真尖峰(>150)持续命中AbnormalAmountRule。
+        // 若每单都高，EMA几单内就追平、规则熄火 —— 所以两类都必须出现。
+        // New behavior: most orders sit near the $50 baseline (anchoring the EMA), ~1/3 are
+        // genuine spikes (>150) that keep tripping AbnormalAmountRule. If every order were
+        // high the EMA would catch up within a few orders and the rule would go quiet — so
+        // BOTH kinds must appear.
+        Map<Boolean, Long> byLevel = spike.stream()
+                .collect(Collectors.partitioningBy(o -> o.getAmount() > 150.0, Collectors.counting()));
+        assertThat(byLevel.get(true)).as("real spikes above 3x the $50 baseline").isGreaterThan(0L);
+        assertThat(byLevel.get(false)).as("baseline orders holding the EMA down").isGreaterThan(0L);
+        // 金额都落在该场景的边界内 / all amounts within the scenario's bounds
+        assertThat(spike).allMatch(o -> o.getAmount() >= 35.0 && o.getAmount() < 360.0);
     }
 
     @Test
