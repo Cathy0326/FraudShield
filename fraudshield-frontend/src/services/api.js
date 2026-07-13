@@ -58,6 +58,11 @@ export const getEventByOrderId = (orderId) =>
 export const triggerTestOrders = () =>
   api.get('/test/send-orders').then((r) => r.data);
 
+// 回填过去N天的合成历史（开发/演示）—— 让时间范围/趋势/热力图有数据可展示
+// Backfill N days of synthetic history (dev/demo) so the time-range views have data
+export const seedHistory = (days = 14) =>
+  api.get(`/test/seed-history?days=${days}`).then((r) => r.data);
+
 export const getAiAnalysis = (orderId) =>
   api.get(`/api/risk-events/${orderId}/ai-analysis`).then((r) => r.data);
 
