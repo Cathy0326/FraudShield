@@ -1,0 +1,77 @@
+{
+  "logreg": {
+    "roc_auc": 0.8076,
+    "pr_auc": 0.0244,
+    "converters_in_top_1pct": 0.03,
+    "converters_in_top_5pct": 0.152,
+    "converters_in_top_10pct": 0.276
+  },
+  "hgb": {
+    "roc_auc": 0.8194,
+    "pr_auc": 0.0276,
+    "converters_in_top_1pct": 0.032,
+    "converters_in_top_5pct": 0.187,
+    "converters_in_top_10pct": 0.343
+  },
+  "cnt_ip_only": {
+    "roc_auc": 0.7973,
+    "pr_auc": 0.0223,
+    "converters_in_top_1pct": 0.026,
+    "converters_in_top_5pct": 0.133,
+    "converters_in_top_10pct": 0.254
+  },
+  "top_features": [
+    {
+      "feature": "cnt_ip",
+      "importance": 0.0217
+    },
+    {
+      "feature": "app",
+      "importance": 0.0094
+    },
+    {
+      "feature": "device",
+      "importance": 0.0035
+    },
+    {
+      "feature": "cnt_app_channel",
+      "importance": 0.0033
+    },
+    {
+      "feature": "prev_click_sec",
+      "importance": 0.0031
+    },
+    {
+      "feature": "next_click_sec",
+      "importance": 0.0028
+    },
+    {
+      "feature": "channel",
+      "importance": 0.0021
+    },
+    {
+      "feature": "hour",
+      "importance": 0.0018
+    },
+    {
+      "feature": "ip_nunique_app",
+      "importance": 0.0016
+    },
+    {
+      "feature": "os",
+      "importance": 0.0011
+    },
+    {
+      "feature": "cnt_ip_app",
+      "importance": 0.0009
+    },
+    {
+      "feature": "cnt_ip_device_os",
+      "importance": 0.0006
+    },
+    {
+      "feature": "ip_nunique_channel",
+      "importance": 0.0004
+    }
+  ]
+}
