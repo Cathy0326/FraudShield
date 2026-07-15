@@ -58,6 +58,11 @@ export const getEventByOrderId = (orderId) =>
 export const triggerTestOrders = () =>
   api.get('/test/send-orders').then((r) => r.data);
 
+// 回填过去N天的合成历史（开发/演示）—— 让时间范围/趋势/热力图有数据可展示
+// Backfill N days of synthetic history (dev/demo) so the time-range views have data
+export const seedHistory = (days = 14) =>
+  api.get(`/test/seed-history?days=${days}`).then((r) => r.data);
+
 export const getAiAnalysis = (orderId) =>
   api.get(`/api/risk-events/${orderId}/ai-analysis`).then((r) => r.data);
 
@@ -76,6 +81,13 @@ export const getFinancialImpact = () =>
 export const getRulePrecision = () =>
   api.get('/api/risk-events/rule-precision').then((r) => r.data);
 
+// 规则运行时配置：启用状态 + 权重（自动/覆盖）/ runtime rule config: enabled + weight
+export const getRuleConfig = () =>
+  api.get('/api/rules/config').then((r) => r.data);
+
+// body: { enabled?: bool, weight?: number|null }  (weight:null 清除覆盖 / clears override)
+export const updateRuleConfig = (rule, body) =>
+  api.put(`/api/rules/config/${rule}`, body).then((r) => r.data);
 export const getRuleHeatmap = (hours = 24) =>
   api.get(`/api/risk-events/rule-heatmap?hours=${hours}`).then((r) => r.data);
 

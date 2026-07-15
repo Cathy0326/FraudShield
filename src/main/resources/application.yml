@@ -3,13 +3,16 @@ server:
   port: 8080
 
 spring:
-  # ── H2 In-Memory Database ─────────────────────────────────────────────────
-  # Swap the url/driver/dialect lines for PostgreSQL when ready.
+  # ── Database ──────────────────────────────────────────────────────────────
+  # Defaults to H2 in-memory so a bare `mvn spring-boot:run` and the test suite need
+  # no external DB. docker-compose overrides these env vars to point at PostgreSQL,
+  # which persists orders + the audit chain across restarts/redeploys (in-memory H2
+  # loses everything on restart). Relaxed binding maps SPRING_DATASOURCE_URL etc.
   datasource:
-    url: jdbc:h2:mem:fraudshield;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:fraudshield;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER_CLASS_NAME:org.h2.Driver}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
 
   # H2 web console — useful during development (disable in prod)
   h2:
@@ -20,9 +23,10 @@ spring:
         web-allow-others: true   # allow access from non-localhost (Docker/remote)
 
   jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+    # Dialect follows the datasource: H2 by default, Postgres when compose overrides it.
+    database-platform: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.H2Dialect}
     hibernate:
-      ddl-auto: update   # auto-creates tables from @Entity classes
+      ddl-auto: update   # auto-creates/updates tables from @Entity classes
     show-sql: false       # flip to true for query logging
 
   # ── Redis ──────────────────────────────────────────────────────────────────

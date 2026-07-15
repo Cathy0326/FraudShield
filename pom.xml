@@ -45,10 +45,17 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
-        <!-- H2 in-memory DB — swap to postgresql driver later -->
+        <!-- H2 — default for local dev + the test suite (no external DB needed) -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- PostgreSQL — durable store used in docker-compose / real deployments;
+             activated purely by the SPRING_DATASOURCE_* env vars, no code change -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
 
