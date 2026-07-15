@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getReviewQueue } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
@@ -33,10 +33,25 @@ export default function ReviewQueuePage() {
   const [error,   setError]   = useState('');
 
   // ── 筛选状态 / filter state ──────────────────────────────────────────
-  const [search,       setSearch]       = useState('');
-  const [riskFilter,   setRiskFilter]   = useState('ALL');
-  const [ruleFilter,   setRuleFilter]   = useState('ALL');
-  const [amountFilter, setAmountFilter] = useState('ALL');
+  // 初始值来自URL —— ⌘K命令栏用自然语言解析出的筛选就是通过这些参数落地的
+  // Seeded from the URL: the ⌘K command bar's natural-language filter lands here
+  // via ?risk=…&amount=…&q=… so "high orders over $500" arrives pre-filtered
+  const [searchParams] = useSearchParams();
+  const [search,       setSearch]       = useState(() => searchParams.get('q') ?? '');
+  const [riskFilter,   setRiskFilter]   = useState(() => searchParams.get('risk') ?? 'ALL');
+  const [ruleFilter,   setRuleFilter]   = useState(() => searchParams.get('rule') ?? 'ALL');
+  const [amountFilter, setAmountFilter] = useState(() =>
+    AMOUNT_BRACKETS[searchParams.get('amount')] ? searchParams.get('amount') : 'ALL');
+
+  // 已在本页时用⌘K再下一条筛选 —— navigate不会重挂载，靠此effect把新参数同步进来
+  // If ⌘K fires another filter while already on this page, navigate() won't remount,
+  // so mirror the incoming params into filter state here
+  useEffect(() => {
+    setSearch(searchParams.get('q') ?? '');
+    setRiskFilter(searchParams.get('risk') ?? 'ALL');
+    setRuleFilter(searchParams.get('rule') ?? 'ALL');
+    setAmountFilter(AMOUNT_BRACKETS[searchParams.get('amount')] ? searchParams.get('amount') : 'ALL');
+  }, [searchParams]);
 
   const fetchQueue = useCallback(async () => {
     try {

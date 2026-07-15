@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getEventsByDateRange, getRulePrecision, getFinancialImpact, getDashboardStats,
-  getRuleConfig, updateRuleConfig } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { getEventsByDateRange, getRulePrecision, getFinancialImpact, getDashboardStats, seedHistory } from '../services/api';
+import { getEventsByDateRange, getRulePrecision, getRuleConfig, getFinancialImpact, getDashboardStats, updateRuleConfig, seedHistory, getRuleHeatmap } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -303,6 +301,73 @@ function PipelineFunnel({ flagged, impact }) {
   );
 }
 
+// ── 规则×小时热力图 —— GA4式维度下钻："哪条规则在什么时段爆发"。
+//    单色顺序色阶（indigo），强度∝命中数/峰值 —— 一眼看出攻击的时间指纹。
+//    Rule × hour heatmap (GA4-style breakdown). Single-hue sequential scale keyed to
+//    the busiest cell, so an attack's time-of-day fingerprint reads at a glance.
+function RuleHeatmap({ data }) {
+  if (!data || !data.rules?.length || data.peak === 0) {
+    return <p className="text-slate-500 text-sm text-center py-8">No rule activity in the last 24 hours.</p>;
+  }
+  const { hours, rules, peak } = data;
+  const humanize = (s) => s.replace(/Rule$/, '');
+
+  // 最热的cell → 一句结论 / hottest cell drives the "so what"
+  let hot = { rule: '', hour: '', n: 0 };
+  rules.forEach(r => r.counts.forEach((c, i) => {
+    if (c > hot.n) hot = { rule: humanize(r.rule), hour: hours[i], n: c };
+  }));
+
+  const cellColor = (c) => c
+    ? `rgba(129,140,248,${(0.15 + 0.85 * (c / peak)).toFixed(3)})`
+    : 'rgba(255,255,255,0.04)';
+
+  return (
+    <div>
+      <div className="overflow-x-auto -mx-1 px-1">
+        <div className="min-w-max">
+          {/* 钟点表头，每3列标一次避免拥挤 / hour axis, labelled every 3rd column */}
+          <div className="flex items-end gap-px mb-1 pl-40">
+            {hours.map((h, i) => (
+              <div key={i} className="w-5 text-center">
+                {i % 3 === 0 && <span className="text-[9px] text-slate-600 tabular-nums">{h.slice(0, 2)}</span>}
+              </div>
+            ))}
+          </div>
+          {rules.map(r => (
+            <div key={r.rule} className="flex items-center gap-px mb-px">
+              <div className="w-40 shrink-0 pr-2 truncate text-right font-mono text-xs text-slate-300" title={r.rule}>
+                {humanize(r.rule)}
+              </div>
+              {r.counts.map((c, i) => (
+                <div key={i}
+                     title={`${humanize(r.rule)} · ${hours[i]} · ${c} hit${c === 1 ? '' : 's'}`}
+                     className="w-5 h-5 rounded-[3px] transition-transform hover:scale-125 hover:ring-1 hover:ring-white/40"
+                     style={{ background: cellColor(c) }} />
+              ))}
+              <div className="w-9 shrink-0 pl-2 text-right text-xs text-slate-500 tabular-nums">{r.total}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-3">
+        <p className="text-xs text-slate-400">
+          Hottest cell: <span className="text-slate-200 font-medium">{hot.rule}</span> fired{' '}
+          <span className="text-indigo-300 font-semibold tabular-nums">{hot.n}×</span> at {hot.hour}.
+        </p>
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span>less</span>
+          {[0, 0.3, 0.55, 0.8, 1].map((t, i) => (
+            <span key={i} className="w-4 h-4 rounded-[3px]"
+                  style={{ background: i === 0 ? 'rgba(255,255,255,0.04)' : `rgba(129,140,248,${0.15 + 0.85 * t})` }} />
+          ))}
+          <span>more</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Panel({ title, subtitle, children, className = '' }) {
   return (
     <div className={`rise-in rounded-2xl border border-white/5 bg-dark-card/80 backdrop-blur-sm
@@ -340,6 +405,7 @@ export default function ReportsPage() {
       .then(list => setRuleCfg(Object.fromEntries(list.map(c => [c.rule, c]))))
       .catch(() => {});
   const [seeding, setSeeding] = useState(false);
+  const [heatmap, setHeatmap] = useState(null);
 
   // 规则精度/财务/概览独立于日期报表加载 —— 都反映全部历史，不受日期窗口约束
   // Precision, finance, and overview load independently of the date report — all
@@ -349,6 +415,7 @@ export default function ReportsPage() {
     getFinancialImpact().then(setImpact).catch(() => {});
     getDashboardStats().then(setStats).catch(() => {});
     loadRuleConfig();
+    getRuleHeatmap(24).then(setHeatmap).catch(() => {});
   }, []);
   };
   useEffect(() => { loadAnalytics(); }, []);
@@ -455,6 +522,13 @@ export default function ReportsPage() {
             </div>
           )}
         </Panel>
+
+        {/* Rule × hour heatmap — 攻击的时间指纹 / when each rule fires */}
+        {heatmap && (
+          <Panel title="Rule Activity Heatmap" subtitle="triggers by rule × hour · last 24h">
+            <RuleHeatmap data={heatmap} />
+          </Panel>
+        )}
 
         {/* Date-range report */}
         <Panel title="Date Range" subtitle="pull risk events for a window, then export">

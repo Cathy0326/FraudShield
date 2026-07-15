@@ -88,6 +88,8 @@ export const getRuleConfig = () =>
 // body: { enabled?: bool, weight?: number|null }  (weight:null 清除覆盖 / clears override)
 export const updateRuleConfig = (rule, body) =>
   api.put(`/api/rules/config/${rule}`, body).then((r) => r.data);
+export const getRuleHeatmap = (hours = 24) =>
+  api.get(`/api/risk-events/rule-heatmap?hours=${hours}`).then((r) => r.data);
 
 export const getDisputeEvidence = (orderId) =>
   api.get(`/api/risk-events/${orderId}/dispute-evidence`).then((r) => r.data);
