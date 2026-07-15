@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getEventsByDateRange, getRulePrecision, getFinancialImpact, getDashboardStats,
   getRuleConfig, updateRuleConfig } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { getEventsByDateRange, getRulePrecision, getFinancialImpact, getDashboardStats, seedHistory } from '../services/api';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -338,16 +339,30 @@ export default function ReportsPage() {
     getRuleConfig()
       .then(list => setRuleCfg(Object.fromEntries(list.map(c => [c.rule, c]))))
       .catch(() => {});
+  const [seeding, setSeeding] = useState(false);
 
   // 规则精度/财务/概览独立于日期报表加载 —— 都反映全部历史，不受日期窗口约束
   // Precision, finance, and overview load independently of the date report — all
   // reflect the full history, not the selected window
-  useEffect(() => {
+  const loadAnalytics = () => {
     getRulePrecision().then(setRulePrecision).catch(() => {});
     getFinancialImpact().then(setImpact).catch(() => {});
     getDashboardStats().then(setStats).catch(() => {});
     loadRuleConfig();
   }, []);
+  };
+  useEffect(() => { loadAnalytics(); }, []);
+
+  // 回填演示历史后立即刷新所有历史向视图 / backfill demo history, then refresh the views
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      await seedHistory(14);
+      loadAnalytics();
+      if (generated) await handleGenerate();
+    } catch { /* dev convenience — ignore */ }
+    finally { setSeeding(false); }
+  };
 
   // 调优提交：写回后端并用返回的最新配置就地更新那张卡 / commit a tuning change,
   // then patch that one card from the server's fresh config
@@ -470,6 +485,13 @@ export default function ReportsPage() {
                 ⬇ Export CSV
               </button>
             )}
+            {/* 开发/演示：回填14天历史，让时间范围/趋势/热力图立刻有数据
+                Dev/demo: backfill 14 days so the history views have data to show */}
+            <button onClick={handleSeed} disabled={seeding}
+              className="ml-auto px-4 py-2 text-slate-400 hover:text-slate-200 border border-white/10 hover:border-white/20 text-sm rounded-lg transition-colors disabled:opacity-50"
+              title="Dev only — inserts 14 days of synthetic past-dated events">
+              {seeding ? 'Seeding…' : '⟲ Seed 14-day demo history'}
+            </button>
           </div>
         </Panel>
 

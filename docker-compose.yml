@@ -7,8 +7,29 @@ networks:
 
 volumes:
   redis-data:
+  postgres-data:
 
 services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  # Durable store for orders + the audit chain. The named volume keeps data across
+  # `docker compose down`/restarts — the whole point of moving off in-memory H2.
+  postgres:
+    image: postgres:16-alpine
+    container_name: fraudshield-postgres
+    networks: [fraudshield-net]
+    environment:
+      POSTGRES_DB: fraudshield
+      POSTGRES_USER: fraudshield
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fraudshield}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fraudshield -d fraudshield"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   # ── Zookeeper ──────────────────────────────────────────────────────────────
   zookeeper:
@@ -84,12 +105,20 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       # 容器间通信用服务名而不是localhost
       # Container networking: use service name, not localhost
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      # PostgreSQL — durable orders + audit chain (survives restarts/redeploys)
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/fraudshield
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: fraudshield
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-fraudshield}
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
       JWT_SECRET: ZnJhdWRzaGllbGQtc2VjcmV0LWtleS0yMDI2LWhhY2thdGhvbg==
       # Azure OpenAI credentials — sourced from .env file (never commit .env)
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}

@@ -2,6 +2,7 @@ package com.fraudshield.controller;
 
 import com.fraudshield.kafka.OrderEventProducer;
 import com.fraudshield.model.Order;
+import com.fraudshield.service.HistoricalSeedService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,9 +15,26 @@ import java.util.UUID;
 public class TestController {
 
     private final OrderEventProducer producer;
+    private final HistoricalSeedService historicalSeedService;
 
-    public TestController(OrderEventProducer producer) {
+    public TestController(OrderEventProducer producer, HistoricalSeedService historicalSeedService) {
         this.producer = producer;
+        this.historicalSeedService = historicalSeedService;
+    }
+
+    /**
+     * 回填过去N天的合成风险事件，让时间范围/趋势/热力图有历史可展示（开发/演示用）。
+     * Backfill N days of past-dated synthetic events so the history-oriented views have
+     * something to show. Dev/demo only. Re-seeding clears the previous synthetic batch.
+     */
+    @GetMapping("/seed-history")
+    public ResponseEntity<Map<String, Object>> seedHistory(
+            @RequestParam(defaultValue = "14") int days) {
+        int written = historicalSeedService.seed(days);
+        return ResponseEntity.ok(Map.of(
+                "message", "backfilled synthetic history",
+                "events", written,
+                "days", Math.max(1, Math.min(days, 30))));
     }
 
     /**
