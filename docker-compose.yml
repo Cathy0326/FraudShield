@@ -7,6 +7,8 @@ networks:
 
 volumes:
   redis-data:
+  prometheus-data:
+  grafana-data:
 
 services:
 
@@ -133,8 +135,19 @@ services:
     networks: [fraudshield-net]
     ports:
       - "9090:9090"
+    # 显式command：加了TSDB持久化路径和保留期后必须重申config.file，否则会覆盖镜像默认启动参数
+    # Explicit command: once we set the TSDB path/retention we must restate config.file,
+    # otherwise these flags replace the image's default args entirely
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'   # keep 30 days of metrics history
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # 关键修复：TSDB落到命名卷 —— 否则Prometheus重启即丢全部历史，Grafana只剩"当天"数据
+      # The fix: persist the TSDB to a named volume. Without this, a Prometheus restart
+      # wipes all history and Grafana shows only "today" (data since the container started).
+      - prometheus-data:/prometheus
     depends_on:
       backend:
         condition: service_healthy
@@ -155,5 +168,7 @@ services:
       # Mounted outside /etc/grafana/provisioning rather than nested inside it —
       # Docker can't create a nested mountpoint inside an already read-only bind mount.
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # Grafana自身状态(用户/星标/注解等)持久化到命名卷 / persist Grafana's own state
+      - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
