@@ -4,6 +4,7 @@ import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskLevel;
 import com.fraudshield.model.RiskResult;
 import com.fraudshield.service.LogisticModelService;
+import com.fraudshield.service.RuleConfigService;
 import com.fraudshield.service.RuleWeightService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -50,21 +51,27 @@ public class RiskDetectionEngine {
     private final MeterRegistry meterRegistry;
     private final RuleWeightService ruleWeights;
     private final LogisticModelService logisticModel;
+    private final RuleConfigService ruleConfig;
 
     // Spring auto-injects every @Component that implements RiskRule.
     // Adding a new rule class is enough — no wiring change needed here.
     public RiskDetectionEngine(List<RiskRule> rules, MeterRegistry meterRegistry,
-                               RuleWeightService ruleWeights, LogisticModelService logisticModel) {
+                               RuleWeightService ruleWeights, LogisticModelService logisticModel,
+                               RuleConfigService ruleConfig) {
         this.rules = rules;
         this.meterRegistry = meterRegistry;
         this.ruleWeights = ruleWeights;
         this.logisticModel = logisticModel;
+        this.ruleConfig = ruleConfig;
     }
 
     public RiskResult evaluate(Order order) {
         Timer.Sample sample = Timer.start(meterRegistry);
 
+        // 运行时被禁用的规则直接跳过 —— 风控负责人可即时关掉一条太吵的规则
+        // Skip rules disabled at runtime, so a fraud lead can silence a noisy rule live
         List<RiskResult> triggered = rules.stream()
+                .filter(rule -> ruleConfig.isEnabled(rule.getRuleName()))
                 .map(rule -> rule.evaluate(order))
                 .filter(r -> r.getRiskScore() > 0)
                 .collect(Collectors.toList());
@@ -93,10 +100,14 @@ public class RiskDetectionEngine {
         List<String> explanations = new ArrayList<>();
 
         for (RiskResult r : triggered) {
-            // 每条命中规则的名字在其triggeredRules里（规则各自报告自己）
-            // Each rule reports itself in its own triggeredRules list
+            // 每条命中规则的名字在其triggeredRules里（规则各自报告自己）。手动权重覆盖优先，
+            // 否则用精度自动推导的权重。/ Each rule reports itself; a manual weight override
+            // wins, otherwise the precision-derived auto weight.
             double weight = r.getTriggeredRules().stream()
-                    .mapToDouble(ruleWeights::weightFor)
+                    .mapToDouble(name -> {
+                        Double override = ruleConfig.weightOverride(name);
+                        return override != null ? override : ruleWeights.weightFor(name);
+                    })
                     .min()
                     .orElse(1.0);
             survivorProbability *= 1.0 - Math.min(1.0, weight * r.getRiskScore());

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { getEventsByDateRange, getRulePrecision, getFinancialImpact, getDashboardStats } from '../services/api';
+import { getEventsByDateRange, getRulePrecision, getFinancialImpact, getDashboardStats,
+  getRuleConfig, updateRuleConfig } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import NavBar from '../components/NavBar';
 import RiskBadge from '../components/RiskBadge';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -86,14 +88,20 @@ function TrendArrow({ delta }) {
   );
 }
 
-function RuleHealthCard({ r }) {
+function RuleHealthCard({ r, cfg, isAdmin, busy, onUpdate }) {
   const g = gradeRule(r);
   const pct = r.precision;
+  // 拖动时的本地权重值，松手才提交 —— 避免拖拽过程狂发请求
+  // Local slider value while dragging; commit on release so we don't spam requests
+  const [drag, setDrag] = useState(null);
+  const weight = drag ?? cfg?.effectiveWeight ?? 1;
+  const disabled = cfg && !cfg.enabled;
   return (
-    <div className="rise-in relative overflow-hidden rounded-2xl border border-white/5
+    <div className={`rise-in relative overflow-hidden rounded-2xl border border-white/5
                     bg-gradient-to-br from-dark-card to-[#141d30] shadow-lg shadow-black/20
-                    p-5 transition-all duration-200 hover:-translate-y-0.5">
-      <span className="absolute left-0 top-0 h-full w-1" style={{ background: g.c }} />
+                    p-5 transition-all duration-200 hover:-translate-y-0.5 ${disabled ? 'opacity-60' : ''}`}>
+      <span className="absolute left-0 top-0 h-full w-1"
+            style={{ background: disabled ? '#475569' : g.c }} />
       <div className="flex items-start justify-between gap-2">
         <p className="font-mono text-sm text-slate-200 leading-tight">{r.rule}</p>
         <span className="shrink-0 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full"
@@ -128,6 +136,52 @@ function RuleHealthCard({ r }) {
       </div>
 
       <p className="mt-4 text-xs leading-snug text-slate-400 border-t border-white/5 pt-3">{g.soWhat}</p>
+
+      {/* 调优控件 —— 诊断就地变操作：调权重 / 停用规则（仅ADMIN可改，其余只读）
+          Tuning controls — turn the diagnosis into action right here: set weight /
+          disable the rule. ADMIN can change; everyone else sees it read-only. */}
+      {cfg && (
+        <div className="mt-3 border-t border-white/5 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] uppercase tracking-wider text-slate-500">Weight in scoring</span>
+            <span className="font-mono text-xs text-slate-300">
+              {weight.toFixed(2)}
+              <span className="text-slate-600"> · {cfg.weightOverride != null ? 'manual' : 'auto'}</span>
+            </span>
+          </div>
+          {isAdmin ? (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="range" min="0" max="1" step="0.05" value={weight}
+                disabled={busy || disabled}
+                onChange={e => setDrag(parseFloat(e.target.value))}
+                onPointerUp={() => { if (drag != null) { onUpdate(r.rule, { weight: drag }); setDrag(null); } }}
+                onKeyUp={() => { if (drag != null) { onUpdate(r.rule, { weight: drag }); setDrag(null); } }}
+                className="flex-1 accent-indigo-400 disabled:opacity-40"
+              />
+              <button
+                onClick={() => onUpdate(r.rule, { weight: null })}
+                disabled={busy || cfg.weightOverride == null}
+                title="Reset to the precision-derived auto weight"
+                className="text-[11px] px-2 py-0.5 rounded border border-white/10 text-slate-400 hover:text-white disabled:opacity-40 transition-colors">
+                auto
+              </button>
+              <button
+                onClick={() => onUpdate(r.rule, { enabled: !cfg.enabled })}
+                disabled={busy}
+                className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${
+                  cfg.enabled ? 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10'
+                              : 'border-rose-500/30 text-rose-300 hover:bg-rose-500/10'}`}>
+                {cfg.enabled ? '● On' : '○ Off'}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-slate-500">
+              {cfg.enabled ? 'Enabled' : 'Disabled'} · an admin can tune weight and toggle this rule
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -274,6 +328,16 @@ export default function ReportsPage() {
   const [rulePrecision, setRulePrecision] = useState([]);
   const [impact, setImpact] = useState(null);
   const [stats, setStats] = useState(null);
+  const [ruleCfg, setRuleCfg] = useState({});   // keyed by rule name
+  const [cfgBusy, setCfgBusy] = useState(false);
+
+  const { user } = useAuth();
+  const isAdmin = (user?.role ?? '').includes('ADMIN');
+
+  const loadRuleConfig = () =>
+    getRuleConfig()
+      .then(list => setRuleCfg(Object.fromEntries(list.map(c => [c.rule, c]))))
+      .catch(() => {});
 
   // 规则精度/财务/概览独立于日期报表加载 —— 都反映全部历史，不受日期窗口约束
   // Precision, finance, and overview load independently of the date report — all
@@ -282,7 +346,19 @@ export default function ReportsPage() {
     getRulePrecision().then(setRulePrecision).catch(() => {});
     getFinancialImpact().then(setImpact).catch(() => {});
     getDashboardStats().then(setStats).catch(() => {});
+    loadRuleConfig();
   }, []);
+
+  // 调优提交：写回后端并用返回的最新配置就地更新那张卡 / commit a tuning change,
+  // then patch that one card from the server's fresh config
+  const handleRuleUpdate = async (rule, body) => {
+    setCfgBusy(true);
+    try {
+      const updated = await updateRuleConfig(rule, body);
+      setRuleCfg(prev => ({ ...prev, [rule]: updated }));
+    } catch { /* likely a non-admin / 403 — ignore, UI stays as-is */ }
+    finally { setCfgBusy(false); }
+  };
 
   const handleGenerate = async () => {
     if (!startDate || !endDate) {
@@ -357,7 +433,10 @@ export default function ReportsPage() {
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rulesRanked.map(r => <RuleHealthCard key={r.rule} r={r} />)}
+              {rulesRanked.map(r => (
+                <RuleHealthCard key={r.rule} r={r} cfg={ruleCfg[r.rule]}
+                  isAdmin={isAdmin} busy={cfgBusy} onUpdate={handleRuleUpdate} />
+              ))}
             </div>
           )}
         </Panel>
