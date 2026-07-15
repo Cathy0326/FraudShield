@@ -4,6 +4,7 @@ import com.fraudshield.model.Order;
 import com.fraudshield.model.RiskLevel;
 import com.fraudshield.model.RiskResult;
 import com.fraudshield.service.LogisticModelService;
+import com.fraudshield.service.RuleConfigService;
 import com.fraudshield.service.RuleWeightService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,7 @@ class RiskDetectionEngineTest {
 
     @Mock RuleWeightService weights;
     @Mock LogisticModelService logisticModel;
+    @Mock RuleConfigService ruleConfig;
 
     private final Order order = new Order("ORD-1", "USER-1", 100.0, "1.2.3.4", "DEV-1",
             LocalDateTime.now());
@@ -31,23 +33,37 @@ class RiskDetectionEngineTest {
     @BeforeEach
     void defaultWeights() {
         lenient().when(weights.weightFor(anyString())).thenReturn(1.0);
+        // 默认所有规则启用、无权重覆盖 / all rules enabled, no override by default.
+        // weightOverride 必须显式返回null —— Mockito对Double返回类型默认给0.0，会把权重压成0
+        // weightOverride must be stubbed to null explicitly: Mockito defaults a Double-returning
+        // method to 0.0, which would force the combination weight to zero
+        lenient().when(ruleConfig.isEnabled(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+        lenient().when(ruleConfig.weightOverride(org.mockito.ArgumentMatchers.any())).thenReturn(null);
         // 默认无训练模型 → 纯noisy-OR / untrained by default - pure noisy-OR
         lenient().when(logisticModel.predict(org.mockito.ArgumentMatchers.anyList()))
                 .thenReturn(java.util.OptionalDouble.empty());
     }
 
     private RiskRule rule(String name, RiskLevel level, double score) {
-        return o -> RiskResult.builder()
-                .orderId(o.getOrderId())
-                .riskLevel(level)
-                .riskScore(score)
-                .triggeredRules(score > 0 ? List.of(name) : List.of())
-                .explanation(name + " fired")
-                .build();
+        // 具名匿名类而非lambda —— lambda的getRuleName()是合成类名，会干扰引擎的启用判断
+        // Named anonymous class, not a lambda: a lambda's getRuleName() is a synthetic
+        // class name that muddies the engine's enabled check
+        return new RiskRule() {
+            @Override public String getRuleName() { return name; }
+            @Override public RiskResult evaluate(Order o) {
+                return RiskResult.builder()
+                        .orderId(o.getOrderId())
+                        .riskLevel(level)
+                        .riskScore(score)
+                        .triggeredRules(score > 0 ? List.of(name) : List.of())
+                        .explanation(name + " fired")
+                        .build();
+            }
+        };
     }
 
     private RiskDetectionEngine engine(RiskRule... rules) {
-        return new RiskDetectionEngine(List.of(rules), new SimpleMeterRegistry(), weights, logisticModel);
+        return new RiskDetectionEngine(List.of(rules), new SimpleMeterRegistry(), weights, logisticModel, ruleConfig);
     }
 
     @Test

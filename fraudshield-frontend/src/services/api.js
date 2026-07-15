@@ -81,6 +81,14 @@ export const getFinancialImpact = () =>
 export const getRulePrecision = () =>
   api.get('/api/risk-events/rule-precision').then((r) => r.data);
 
+// 规则运行时配置：启用状态 + 权重（自动/覆盖）/ runtime rule config: enabled + weight
+export const getRuleConfig = () =>
+  api.get('/api/rules/config').then((r) => r.data);
+
+// body: { enabled?: bool, weight?: number|null }  (weight:null 清除覆盖 / clears override)
+export const updateRuleConfig = (rule, body) =>
+  api.put(`/api/rules/config/${rule}`, body).then((r) => r.data);
+
 export const getDisputeEvidence = (orderId) =>
   api.get(`/api/risk-events/${orderId}/dispute-evidence`).then((r) => r.data);
 
