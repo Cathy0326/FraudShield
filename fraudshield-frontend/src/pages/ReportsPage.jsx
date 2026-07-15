@@ -416,7 +416,6 @@ export default function ReportsPage() {
     getDashboardStats().then(setStats).catch(() => {});
     loadRuleConfig();
     getRuleHeatmap(24).then(setHeatmap).catch(() => {});
-  }, []);
   };
   useEffect(() => { loadAnalytics(); }, []);
 
